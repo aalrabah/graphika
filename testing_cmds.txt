@@ -144,3 +144,109 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 PY
+
+
+
+### testing to get mentions.json on all chunks ###
+
+python - <<'PY'
+import os, json, asyncio, time
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path.cwd() / ".env"
+load_dotenv(dotenv_path=env_path, override=True)
+
+# Choose ONE model/provider here
+os.environ["LLM_PROVIDER"] = "hf"
+os.environ["LLM_MODEL"] = "llama3b"  # qwen7b, qwen14b, etc.
+
+from llm import extract_concepts_with_roles_from_chunks
+
+def _require_file(path: Path) -> None:
+    if not path.exists():
+        raise SystemExit(f"Missing file: {path} (CWD={Path.cwd()})")
+
+def fmt_secs(s: float) -> str:
+    s = max(0, int(s))
+    h, s = divmod(s, 3600)
+    m, s = divmod(s, 60)
+    if h: return f"{h}h{m:02d}m{s:02d}s"
+    if m: return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+async def main():
+    chunks_path = Path("out/chunks.jsonl")
+    out_mentions_path = Path("out/mentions.jsonl")
+    _require_file(chunks_path)
+
+    # Load ALL chunks
+    chunks = []
+    with chunks_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                chunks.append(json.loads(line))
+
+    total = len(chunks)
+    print("CWD =", Path.cwd())
+    print("ENV =", env_path, "(exists)" if env_path.exists() else "(missing)")
+    print("LLM_PROVIDER =", os.getenv("LLM_PROVIDER"))
+    print("LLM_MODEL    =", os.getenv("LLM_MODEL"))
+    print("Loaded chunks =", total)
+    print("Writing to    =", out_mentions_path)
+    print("----")
+
+    # Process in batches so you get progress
+    batch_size = int(os.getenv("MENTIONS_BATCH_SIZE", "25"))  # tweak if you want
+    print_every = int(os.getenv("MENTIONS_PRINT_EVERY", "1"))  # batches
+
+    out_mentions_path.parent.mkdir(parents=True, exist_ok=True)
+
+    mentions_total = 0
+    t0 = time.time()
+    last_t = t0
+
+    # Stream output as we go
+    with out_mentions_path.open("w", encoding="utf-8") as out_f:
+        for b, start in enumerate(range(0, total, batch_size), start=1):
+            end = min(start + batch_size, total)
+            batch = chunks[start:end]
+
+            # Do the real work
+            batch_mentions = await extract_concepts_with_roles_from_chunks(batch)
+            mentions_total += len(batch_mentions)
+
+            # Write mentions immediately (so if it crashes you keep progress)
+            for m in batch_mentions:
+                out_f.write(json.dumps(m, ensure_ascii=False) + "\n")
+            out_f.flush()
+
+            # Progress print
+            if (b % print_every) == 0 or end == total:
+                now = time.time()
+                elapsed = now - t0
+                dt = now - last_t
+                last_t = now
+
+                done = end
+                rate_chunks = done / elapsed if elapsed > 0 else 0.0
+                remaining = total - done
+                eta = remaining / rate_chunks if rate_chunks > 0 else 0.0
+
+                print(
+                    f"[{done}/{total}] chunks | "
+                    f"batch={b} ({end-start} chunks) | "
+                    f"+{len(batch_mentions)} mentions | "
+                    f"mentions_total={mentions_total} | "
+                    f"rate={rate_chunks:.2f} chunks/s | "
+                    f"elapsed={fmt_secs(elapsed)} | eta={fmt_secs(eta)}"
+                )
+
+    print("----")
+    print(f"✅ Wrote: {out_mentions_path} ({mentions_total} mention records)")
+    print("Tip: rerun clustering after this finishes.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+PY

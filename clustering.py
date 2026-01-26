@@ -45,6 +45,8 @@ import os
 import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from sklearn.decomposition import PCA
+
 
 logger = logging.getLogger("clustering")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -140,12 +142,46 @@ def terms_to_label_hint(terms: List[str], max_tokens: int = 4) -> str:
 # ----------------------------
 
 def build_chunks_index(chunks: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Build a chunk_id -> chunk record index, with a few safe aliases so mentions chunk_ids
+    still resolve even if your chunk ids differ slightly (e.g., '__0022' vs '__22', '.pdf' suffix).
+    """
+    import re
+
+    def _aliases(cid: str) -> List[str]:
+        cid = (cid or "").strip()
+        if not cid:
+            return []
+        out = {cid}
+
+        # common suffix normalization: PREFIX__0022 <-> PREFIX__22
+        m = re.match(r"^(.*)__0*(\d+)$", cid)
+        if m:
+            prefix, num = m.group(1), int(m.group(2))
+            out.add(f"{prefix}__{num}")          # no leading zeros
+            out.add(f"{prefix}__{num:04d}")      # 4-digit
+            out.add(f"{prefix}__{num:05d}")      # 5-digit (just in case)
+
+        # drop a few common extensions/suffixes
+        for ext in [".pdf", ".pptx", ".ppt", ".docx"]:
+            if ext in cid:
+                out.add(cid.replace(ext, ""))
+
+        return list(out)
+
     by_id: Dict[str, Dict[str, Any]] = {}
     for ch in chunks:
-        cid = ch.get("chunk_id")
-        if cid is None:
+        raw = ch.get("chunk_id")
+        if raw is None:
             continue
-        by_id[str(cid)] = ch
+        cid = str(raw).strip()
+        if not cid:
+            continue
+
+        for a in _aliases(cid):
+            # keep the first seen record for an alias (stable)
+            by_id.setdefault(a, ch)
+
     return by_id
 
 
@@ -175,18 +211,57 @@ def concept_context_texts(
     *,
     include_concept_in_text: bool = False,
     concept_label: Optional[str] = None,
-) -> List[str]:
+) -> Tuple[List[str], List[str]]:
+    """
+    Returns (kept_chunk_ids, texts) with 1:1 alignment.
+
+    Fixes your current bug: many pipelines don't store text under 'text'.
+    We try multiple keys and also support list-based fields (lines/sentences).
+    """
+    def _get_text(ch: Dict[str, Any]) -> str:
+        # try common keys
+        for k in ("text", "chunk_text", "content", "raw_text", "page_text", "body", "markdown"):
+            v = ch.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+
+        # try list fields
+        for k in ("lines", "sentences", "paragraphs"):
+            v = ch.get(k)
+            if isinstance(v, list):
+                s = "\n".join(str(x) for x in v if str(x).strip()).strip()
+                if s:
+                    return s
+
+        return ""
+
+    kept_chunk_ids: List[str] = []
     texts: List[str] = []
+
     for cid in chunk_ids:
-        ch = chunks_by_id.get(cid, {})
-        t = (ch.get("text") or "").strip()
+        cid = str(cid).strip()
+        if not cid:
+            continue
+
+        ch = chunks_by_id.get(cid)
+        if not ch:
+            continue
+
+        t = _get_text(ch)
         if not t:
             continue
+
         if include_concept_in_text:
             label = concept_label or concept_id
             t = f"{t}\n\nCONCEPT: {label}"
+
+        kept_chunk_ids.append(cid)
         texts.append(t)
-    return texts
+
+    return kept_chunk_ids, texts
+
+
+
 
 
 # ----------------------------
@@ -220,8 +295,15 @@ def _import_or_die():
     return SentenceTransformer, np, CountVectorizer, TfidfTransformer, normalize, umap, hdbscan
 
 
-def embed_texts(texts: List[str], model_name: str, batch_size: int, normalize_embeddings: bool):
+def embed_texts(texts, model_name: str, batch_size: int, normalize_embeddings: bool):
     SentenceTransformer, np, *_ = _import_or_die()
+
+    # Defensive: ensure list[str]
+    if isinstance(texts, str):
+        texts = [texts]
+    elif not isinstance(texts, list):
+        texts = list(texts)
+
     model = SentenceTransformer(model_name)
     X = model.encode(
         texts,
@@ -229,8 +311,15 @@ def embed_texts(texts: List[str], model_name: str, batch_size: int, normalize_em
         show_progress_bar=False,
         convert_to_numpy=True,
         normalize_embeddings=normalize_embeddings,
-    ).astype("float32", copy=False)
+    )
+
+    X = np.asarray(X, dtype="float32")
+    # Defensive: if a single vector comes back, make it (1, dim)
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+
     return X
+
 
 
 def reduce_umap(X, *, n_neighbors: int, n_components: int):
@@ -286,6 +375,7 @@ def ctfidf_terms_per_cluster(cluster_docs: List[str], top_terms: int) -> List[Li
 def cluster_concept(
     concept_id: str,
     texts: List[str],
+    chunk_ids: List[str],
     *,
     embedding_model: str,
     batch_size: int,
@@ -299,51 +389,64 @@ def cluster_concept(
     top_terms: int,
 ) -> Dict[str, Any]:
     """
-    Returns ONLY:
-      { "concept_id": ..., "context_clusters": [ {cluster_id, count_chunks, label_hint}, ... ] }
+    Same output schema, but safer:
+    - only falls back to cluster 0 when there are truly too few contexts OR clustering disabled.
+    - uses PCA (as you already do) and then HDBSCAN.
     """
     n = len(texts)
+    if len(chunk_ids) != n:
+        raise ValueError(f"[{concept_id}] chunk_ids and texts length mismatch: {len(chunk_ids)} != {n}")
+
     if n == 0:
-        return {"concept_id": concept_id, "context_clusters": []}
+        return {"concept_id": concept_id, "context_clusters": [], "chunk_cluster_assignments": []}
 
-    # Always embed (even if we later fallback) so behavior is consistent if you enable UMAP/HDBSCAN.
-    X = embed_texts(texts, model_name=embedding_model, batch_size=batch_size, normalize_embeddings=normalize_embeddings)
+    # IMPORTANT: in your codebase, 'use_umap' is effectively "enable clustering"
+    enable_clustering = bool(use_umap)
 
-    # Fallback: too few contexts => single cluster
-    if n < min_contexts_to_cluster or not use_umap:
+    # Always embed
+    X = embed_texts(
+        texts,
+        model_name=embedding_model,
+        batch_size=batch_size,
+        normalize_embeddings=normalize_embeddings,
+    )
+
+    # Fallback: too few contexts OR clustering disabled
+    if (n < int(min_contexts_to_cluster)) or (not enable_clustering):
         return {
             "concept_id": concept_id,
-            "context_clusters": [
-                {"cluster_id": 0, "count_chunks": n, "label_hint": "misc"}
-            ],
+            "context_clusters": [{"cluster_id": 0, "count_chunks": n, "label_hint": "misc"}],
+            "chunk_cluster_assignments": [{"chunk_id": cid, "cluster_id": 0} for cid in chunk_ids],
         }
 
-    # UMAP reduction
-        # PCA reduction (UMAP replacement to avoid llvmlite/numba)
-    n_components = min(umap_components, n, X.shape[1])
+    # PCA reduction
+    n_components = max(2, min(int(umap_components), n, X.shape[1]))
     Xr = PCA(n_components=n_components, random_state=42).fit_transform(X)
 
+    # HDBSCAN parameters tuned for small n
+    if min_cluster_size is not None:
+        mcs = int(min_cluster_size)
+    else:
+        # sensible default for small per-concept context counts
+        mcs = max(2, min(8, n // 3 if n >= 6 else 2))
 
-    # HDBSCAN clustering
-    mcs = min_cluster_size if min_cluster_size is not None else max(3, int(round(0.05 * n)))
     labels = cluster_hdbscan(Xr, min_cluster_size=mcs, min_samples=min_samples)
 
-    # Group contexts by label
+    # group indices by label
     by_label: Dict[int, List[int]] = defaultdict(list)
     for i, lab in enumerate(labels):
         by_label[int(lab)].append(i)
 
-    # Ignore noise for labeling; if everything is noise, treat as one cluster
+    # if all noise => treat as one cluster
     non_noise = sorted([lab for lab in by_label.keys() if lab != -1])
     if not non_noise:
         return {
             "concept_id": concept_id,
-            "context_clusters": [
-                {"cluster_id": 0, "count_chunks": n, "label_hint": "misc"}
-            ],
+            "context_clusters": [{"cluster_id": 0, "count_chunks": n, "label_hint": "misc"}],
+            "chunk_cluster_assignments": [{"chunk_id": cid, "cluster_id": 0} for cid in chunk_ids],
         }
 
-    # c-TF-IDF per cluster for label_hint
+    # label hints using c-TF-IDF
     cluster_docs = [" ".join(texts[i] for i in by_label[lab]) for lab in non_noise]
     term_lists = ctfidf_terms_per_cluster(cluster_docs, top_terms=top_terms)
 
@@ -356,8 +459,12 @@ def cluster_concept(
                 "label_hint": terms_to_label_hint(terms),
             }
         )
-
-    # Sort biggest first (useful downstream)
     context_clusters.sort(key=lambda x: -x["count_chunks"])
 
-    return {"concept_id": concept_id, "context_clusters": context_clusters}
+    chunk_cluster_assignments = [{"chunk_id": chunk_ids[i], "cluster_id": int(labels[i])} for i in range(n)]
+
+    return {
+        "concept_id": concept_id,
+        "context_clusters": context_clusters,
+        "chunk_cluster_assignments": chunk_cluster_assignments,
+    }

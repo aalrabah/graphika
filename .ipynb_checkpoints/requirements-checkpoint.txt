@@ -1,0 +1,8 @@
+docling
+openai
+python-dotenv
+pydantic
+requests
+tqdm
+typing_extensions>=4.12
+pydantic>=2.7

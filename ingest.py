@@ -65,6 +65,34 @@ def write_jsonl(records: List[Dict[str, Any]], out_path: str) -> None:
 
 
 def ingest_pdfs(pdf_paths: List[str], out_name: str = "chunks.jsonl") -> str:
+    import re
+    from pathlib import Path
+
+    def _pdf_sort_key(p: str):
+        """
+        Natural sort:
+        1) prefer explicit lecture/chapter-like numbers (lec/lecture/ch/chapter/lesson/week/module/unit)
+        2) else use first number anywhere
+        3) else fallback to name
+        """
+        name = Path(p).stem.lower()
+
+        # (1) explicit sequence markers
+        # examples: "lec 3", "lecture-03", "ch.2", "chapter_10", "week5", "module 7", "unit02"
+        m = re.search(r"(?:lec|lecture|ch|chapter|chap|lesson|week|wk|module|unit)\s*[\.\-_:]*\s*(\d+)", name)
+        if m:
+            return (0, int(m.group(1)), name)
+
+        # (2) first number anywhere (handles "03_intro", "part2", etc.)
+        m2 = re.search(r"(\d+)", name)
+        if m2:
+            return (1, int(m2.group(1)), name)
+
+        # (3) no numbers => stable fallback
+        return (2, 10**9, name)
+
+    pdf_paths = sorted([str(p) for p in pdf_paths], key=_pdf_sort_key)
+
     all_records: List[Dict[str, Any]] = []
     for p in pdf_paths:
         print(f"📄 Ingesting: {p}")
@@ -76,6 +104,7 @@ def ingest_pdfs(pdf_paths: List[str], out_name: str = "chunks.jsonl") -> str:
     write_jsonl(all_records, out_path)
     print(f"✅ Wrote {len(all_records)} chunks to: {out_path}")
     return out_path
+
 
 
 if __name__ == "__main__":
