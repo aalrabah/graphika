@@ -158,6 +158,8 @@ TEMPORAL / STATS:
 EVIDENCE_MODE:
 {MODE_BLOCK}
 
+RULES FOR USING THE EVIDENCE TEXT: - Base your decision ONLY on the text shown in EVIDENCE below. - The EVIDENCE text is the supporting passages for this (A,B) pair. - If the text does not clearly support a relation, output null. - Your returned evidence[].quote MUST be an exact substring copied from the provided text.
+
 EVIDENCE (use ONLY what is shown below; do not assume anything unstated):
 {EVIDENCE_BLOCK}
 
