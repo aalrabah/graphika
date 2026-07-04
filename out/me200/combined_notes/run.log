@@ -1,0 +1,251 @@
+INFO:docling.datamodel.document:detected formats: [<InputFormat.PDF: 'pdf'>]
+INFO:docling.document_converter:Going to convert document batch...
+INFO:docling.document_converter:Initializing pipeline for StandardPdfPipeline with options hash 259bce8b6ebd955098094819c170ffe4
+INFO:docling.models.factories.base_factory:Loading plugin 'docling_defaults'
+INFO:docling.models.factories:Registered picture descriptions: ['picture_description_vlm_engine', 'vlm', 'api']
+INFO:docling.models.factories.base_factory:Loading plugin 'docling_defaults'
+INFO:docling.models.factories:Registered ocr engines: ['auto', 'easyocr', 'kserve_v2_ocr', 'nemotron-ocr', 'ocrmac', 'rapidocr', 'tesserocr', 'tesseract']
+INFO:docling.models.stages.ocr.auto_ocr_model:Nemotron cannot be used because it is not installed.
+INFO:docling.models.stages.ocr.auto_ocr_model:rapidocr cannot be used because onnxruntime is not installed.
+INFO:docling.models.stages.ocr.auto_ocr_model:easyocr cannot be used because it is not installed.
+INFO:docling.utils.accelerator_utils:Accelerator device: 'cuda:0'
+[32m[INFO] 2026-07-03 03:26:42,983 [RapidOCR] base.py:23: Using engine_name: torch[0m
+[32m[INFO] 2026-07-03 03:26:42,985 [RapidOCR] device_config.py:64: Using GPU device with ID: 0[0m
+[32m[INFO] 2026-07-03 03:26:42,992 [RapidOCR] download_file.py:60: File exists and is valid: /opt/conda/lib/python3.13/site-packages/rapidocr/models/PP-OCRv6_det_small.pth[0m
+[32m[INFO] 2026-07-03 03:26:42,992 [RapidOCR] main.py:50: Using /opt/conda/lib/python3.13/site-packages/rapidocr/models/PP-OCRv6_det_small.pth[0m
+[32m[INFO] 2026-07-03 03:26:44,017 [RapidOCR] base.py:23: Using engine_name: torch[0m
+[32m[INFO] 2026-07-03 03:26:44,018 [RapidOCR] device_config.py:64: Using GPU device with ID: 0[0m
+[32m[INFO] 2026-07-03 03:26:44,020 [RapidOCR] download_file.py:60: File exists and is valid: /opt/conda/lib/python3.13/site-packages/rapidocr/models/ch_ptocr_mobile_v2.0_cls_mobile.pth[0m
+[32m[INFO] 2026-07-03 03:26:44,021 [RapidOCR] main.py:50: Using /opt/conda/lib/python3.13/site-packages/rapidocr/models/ch_ptocr_mobile_v2.0_cls_mobile.pth[0m
+[32m[INFO] 2026-07-03 03:26:44,068 [RapidOCR] base.py:23: Using engine_name: torch[0m
+[32m[INFO] 2026-07-03 03:26:44,068 [RapidOCR] device_config.py:64: Using GPU device with ID: 0[0m
+[32m[INFO] 2026-07-03 03:26:44,085 [RapidOCR] download_file.py:60: File exists and is valid: /opt/conda/lib/python3.13/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth[0m
+[32m[INFO] 2026-07-03 03:26:44,085 [RapidOCR] main.py:50: Using /opt/conda/lib/python3.13/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth[0m
+INFO:docling.models.stages.ocr.auto_ocr_model:Auto OCR model selected rapidocr with torch.
+INFO:docling.models.factories.base_factory:Loading plugin 'docling_defaults'
+INFO:docling.models.factories:Registered layout engines: ['layout_object_detection', 'docling_layout_default', 'docling_experimental_table_crops_layout']
+INFO:docling.utils.accelerator_utils:Accelerator device: 'cuda:0'
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/docling-project/docling-layout-heron/revision/main "HTTP/1.1 200 OK"
+📄 Ingesting: data/me200/ME200_CombinedNotes.pdf
+Loading weights:   0%|          | 0/770 [00:00<?, ?it/s]Loading weights: 100%|██████████| 770/770 [00:00<00:00, 8551.08it/s]
+INFO:docling.models.factories.base_factory:Loading plugin 'docling_defaults'
+INFO:docling.models.factories:Registered table structure engines: ['docling_tableformer', 'docling_tableformer_v2', 'granite_vision_table']
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/docling-project/docling-models/revision/v2.3.0 "HTTP/1.1 200 OK"
+INFO:docling.utils.accelerator_utils:Accelerator device: 'cuda:0'
+INFO:docling.pipeline.base_pipeline:Processing document ME200_CombinedNotes.pdf
+/opt/conda/lib/python3.13/site-packages/torch/nn/modules/conv.py:548: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at /pytorch/aten/src/ATen/native/Convolution.cpp:1025.)
+  return F.conv2d(
+[33m[WARNING] 2026-07-03 03:27:10,090 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:13,194 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:13,626 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:15,690 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:21,687 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:24,924 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:25,934 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:28,392 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:34,520 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:35,543 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:38,516 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:39,888 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+[33m[WARNING] 2026-07-03 03:27:42,475 [RapidOCR] main.py:132: The text detection result is empty[0m
+WARNING:docling.models.stages.ocr.rapid_ocr_model:RapidOCR returned empty result!
+INFO:docling.document_converter:Finished converting document ME200_CombinedNotes.pdf in 61.00 sec.
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config.json "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/tokenizer_config.json "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-MiniLM-L6-v2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-MiniLM-L6-v2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/sentence_bert_config.json "HTTP/1.1 307 Temporary Redirect"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/sentence_bert_config.json "HTTP/1.1 200 OK"
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1197 > 512). Running this sequence through the model will result in indexing errors
+   -> 25 chunks
+✅ Wrote 25 chunks to: out/me200/chunks.jsonl
+
+[llm] provider=hf model=meta-llama/Llama-3.2-3B-Instruct
+[llm] loaded chunks: 25 from out/me200/chunks.jsonl
+[llm] chunk_batch=8
+[vLLM] Loading model: meta-llama/Llama-3.2-3B-Instruct
+[vLLM] GPU memory utilization: 0.9
+[vLLM] Max model length: 8192
+INFO 07-03 03:27:46 [utils.py:233] non-default args: {'trust_remote_code': True, 'max_model_len': 8192, 'disable_log_stats': True, 'enforce_eager': True, 'model': 'meta-llama/Llama-3.2-3B-Instruct'}
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/utils/_http.py", line 776, in hf_raise_for_status
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/conda/lib/python3.13/site-packages/httpx/_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '401 Unauthorized' for url 'https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/resolve/main/config.json'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.13/site-packages/transformers/utils/hub.py", line 437, in cached_files
+    hf_hub_download(
+    ~~~~~~~~~~~~~~~^
+        path_or_repo_id,
+        ^^^^^^^^^^^^^^^^
+    ...<10 lines>...
+        tqdm_class=tqdm_class,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/file_download.py", line 1016, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+        # Destination
+    ...<15 lines>...
+        dry_run=dry_run,
+    )
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/file_download.py", line 1167, in _hf_hub_download_to_cache_dir
+    _raise_on_head_call_error(head_call_error, force_download, local_files_only)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/file_download.py", line 1805, in _raise_on_head_call_error
+    raise head_call_error
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/file_download.py", line 1691, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+        url=url,
+    ...<4 lines>...
+        retry_on_errors=retry_on_errors,
+    )
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/file_download.py", line 1613, in get_hf_file_metadata
+    response = _httpx_follow_relative_redirects_with_backoff(
+        method="HEAD", url=url, headers=hf_headers, timeout=timeout, retry_on_errors=retry_on_errors
+    )
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/utils/_http.py", line 707, in _httpx_follow_relative_redirects_with_backoff
+    hf_raise_for_status(response)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/opt/conda/lib/python3.13/site-packages/huggingface_hub/utils/_http.py", line 802, in hf_raise_for_status
+    raise _format(GatedRepoError, message, response, repo_type=repo_type, repo_id=repo_id) from e
+huggingface_hub.errors.GatedRepoError: 401 Client Error. (Request ID: Root=1-6a472c32-5053db6a0197f07d1c453775;20d3b488-c913-4401-a292-56b4649a3274)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/resolve/main/config.json.
+Access to model meta-llama/Llama-3.2-3B-Instruct is restricted. You must have access to it and be authenticated to access it. Please log in.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/jroyce/instructkg-clean/main.py", line 482, in <module>
+    main()
+    ~~~~^^
+  File "/home/jroyce/instructkg-clean/main.py", line 418, in main
+    asyncio.run(
+    ~~~~~~~~~~~^
+        run_llm_and_cards(
+        ^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        )
+        ^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/conda/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/conda/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/jroyce/instructkg-clean/main.py", line 106, in run_llm_and_cards
+    concepts_lists = await llm.extract_concepts_llm_batch(client, texts=texts, model=model)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jroyce/instructkg-clean/llm.py", line 155, in extract_concepts_llm_batch
+    resp = await client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/home/jroyce/instructkg-clean/adapters.py", line 363, in create
+    texts = await asyncio.to_thread(_run_batch)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.13/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.13/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/home/jroyce/instructkg-clean/adapters.py", line 361, in _run_batch
+    return self._engine.generate_many(instructions, user_texts)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jroyce/instructkg-clean/adapters.py", line 273, in generate_many
+    self.load()
+    ~~~~~~~~~^^
+  File "/home/jroyce/instructkg-clean/adapters.py", line 228, in load
+    self.llm = LLM(
+               ~~~^
+        model=self.model_id,
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        enforce_eager=True,  # Disable CUDA graphs to avoid async issues
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/site-packages/vllm/entrypoints/llm.py", line 382, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        engine_args=engine_args, usage_context=UsageContext.LLM_CLASS
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/site-packages/vllm/v1/engine/llm_engine.py", line 169, in from_engine_args
+    vllm_config = engine_args.create_engine_config(usage_context)
+  File "/opt/conda/lib/python3.13/site-packages/vllm/engine/arg_utils.py", line 1539, in create_engine_config
+    maybe_override_with_speculators(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=self.model,
+        ^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        hf_token=self.hf_token,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/site-packages/vllm/transformers_utils/config.py", line 583, in maybe_override_with_speculators
+    config_dict, _ = PretrainedConfig.get_config_dict(
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model if gguf_model_repo is None else gguf_model_repo,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **without_trust_remote_code(kwargs),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/conda/lib/python3.13/site-packages/transformers/configuration_utils.py", line 687, in get_config_dict
+    config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+                          ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.13/site-packages/transformers/configuration_utils.py", line 742, in _get_config_dict
+    resolved_config_file = cached_file(
+        pretrained_model_name_or_path,
+    ...<9 lines>...
+        _commit_hash=commit_hash,
+    )
+  File "/opt/conda/lib/python3.13/site-packages/transformers/utils/hub.py", line 293, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+  File "/opt/conda/lib/python3.13/site-packages/transformers/utils/hub.py", line 503, in cached_files
+    raise OSError(
+    ...<2 lines>...
+    ) from e
+OSError: You are trying to access a gated repo.
+Make sure to have access to it at https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct.
+401 Client Error. (Request ID: Root=1-6a472c32-5053db6a0197f07d1c453775;20d3b488-c913-4401-a292-56b4649a3274)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/resolve/main/config.json.
+Access to model meta-llama/Llama-3.2-3B-Instruct is restricted. You must have access to it and be authenticated to access it. Please log in.

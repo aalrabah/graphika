@@ -1,3 +1,45 @@
+#### Jeffry's test log
+
+Quen3B testing on A100 GPU
+  SQL    // text slides
+    LLM_PROVIDER=vllm python main.py   --data-dir data/sql   --steps ingest llm clustering pairpackets   --out-dir out/sql   --llm-model Qwen/Qwen2.5-3B-Instruct
+      13 chunks
+      4 mentions
+      57 concepts
+      2 clusters
+      0 pairs
+  me200_Ch1    // handwritten scans
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --steps ingest llm clustering pairpackets   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      2 chunks
+      2 mentions
+      2 concepts
+      ERROR: chunks must have more than one neighbor (I think)
+  me200_CombinedNotes    // handwritten scans - weak concept extraction 
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --steps ingest llm clustering pairpackets   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      24 chunks
+      29 mentions
+      67 concepts
+      6 clusters
+      11 pairs
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      24 chunks
+      29 mentions
+      67 concepts
+      6 clusters
+      11 pairs
+      11 relations
+  me400_CombinedNotes   // more similar to sql material (text slides)
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-3B-Instruct
+      725 chunks!!
+      2300 mentions
+      1423 concepts
+      180 clusters
+      4777 pairs
+      4777 relations
+
+#### End of Jeffry's test log
+
+
 LLM_PROVIDER=hf python main.py --steps ingest llm clustering pairpackets --out-dir out --llm-model meta-llama/Llama-3.2-3B-Instruct
 
 
@@ -19,7 +61,12 @@ LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py   --data-dir da
 
 LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python relation_judger.py  --data-dir data/anlp   --out-dir out/anlp   --llm-model meta-llama/Llama-3.2-3B-Instruct
 
+---
+LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py   --data-dir data/sql   --steps ingest llm clustering pairpackets   --out-dir out/sql   --llm-model Qwen/Qwen2.5-32B-Instruct
+python main.py --data-dir data/me200 --out-dir out/me200
+LLM_PROVIDER=vllm python main.py   --data-dir data/sql   --steps ingest llm clustering pairpackets   --out-dir out/sql   --llm-model Qwen/Qwen2.5-32B-Instruct
 
+---
 
 ## llama 3B ## experiment
   python relation_judger.py \
