@@ -1,95 +1,0 @@
-
-[llm] provider=hf model=qwen32b
-[llm] loaded chunks: 25 from out/me200/chunks.jsonl
-[llm] chunk_batch=8
-[vLLM] Loading model: Qwen/Qwen2.5-32B-Instruct
-[vLLM] GPU memory utilization: 0.9
-[vLLM] Max model length: 8192
-INFO 07-03 03:32:43 [utils.py:233] non-default args: {'trust_remote_code': True, 'max_model_len': 8192, 'disable_log_stats': True, 'enforce_eager': True, 'model': 'Qwen/Qwen2.5-32B-Instruct'}
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-INFO 07-03 03:32:43 [model.py:549] Resolved architecture: Qwen2ForCausalLM
-INFO 07-03 03:32:43 [model.py:1678] Using max model len 8192
-INFO 07-03 03:32:43 [scheduler.py:238] Chunked prefill is enabled with max_num_batched_tokens=16384.
-INFO 07-03 03:32:43 [vllm.py:790] Asynchronous scheduling is enabled.
-WARNING 07-03 03:32:43 [vllm.py:848] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
-WARNING 07-03 03:32:43 [vllm.py:859] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
-INFO 07-03 03:32:45 [vllm.py:1025] Cudagraph is disabled under eager mode
-INFO 07-03 03:32:45 [compilation.py:292] Enabled custom fusions: norm_quant, act_quant
-(EngineCore pid=78453) INFO 07-03 03:32:46 [core.py:105] Initializing a V1 LLM engine (v0.19.1) with config: model='Qwen/Qwen2.5-32B-Instruct', speculative_config=None, tokenizer='Qwen/Qwen2.5-32B-Instruct', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=Qwen/Qwen2.5-32B-Instruct, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_images_per_batch': 0, 'compile_sizes': [], 'compile_ranges_endpoints': [16384], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False}, 'max_cudagraph_capture_size': 0, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': True, 'static_all_moe_layers': []}
-(EngineCore pid=78453) INFO 07-03 03:32:47 [parallel_state.py:1400] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://10.42.44.236:52259 backend=nccl
-(EngineCore pid=78453) INFO 07-03 03:32:47 [parallel_state.py:1716] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
-(EngineCore pid=78453) INFO 07-03 03:32:48 [gpu_model_runner.py:4735] Starting to load model Qwen/Qwen2.5-32B-Instruct...
-(EngineCore pid=78453) INFO 07-03 03:32:48 [cuda.py:334] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
-(EngineCore pid=78453) INFO 07-03 03:32:48 [flash_attn.py:596] Using FlashAttention version 3
-(EngineCore pid=78453) INFO 07-03 03:39:15 [weight_utils.py:581] Time spent downloading weights for Qwen/Qwen2.5-32B-Instruct: 386.301230 seconds
-(EngineCore pid=78453) INFO 07-03 03:39:15 [weight_utils.py:848] Prefetching checkpoint files into page cache started (in background)
-(EngineCore pid=78453) Loading safetensors checkpoint shards:   0% Completed | 0/17 [00:00<?, ?it/s]
-(EngineCore pid=78453) INFO 07-03 03:41:00 [weight_utils.py:825] Prefetching checkpoint files: 10% (2/17)
-(EngineCore pid=78453) INFO 07-03 03:41:00 [weight_utils.py:825] Prefetching checkpoint files: 20% (4/17)
-(EngineCore pid=78453) INFO 07-03 03:41:00 [weight_utils.py:825] Prefetching checkpoint files: 30% (6/17)
-(EngineCore pid=78453) INFO 07-03 03:41:00 [weight_utils.py:825] Prefetching checkpoint files: 40% (7/17)
-(EngineCore pid=78453) Loading safetensors checkpoint shards:   6% Completed | 1/17 [02:41<43:09, 161.82s/it]
-(EngineCore pid=78453) INFO 07-03 03:42:53 [weight_utils.py:825] Prefetching checkpoint files: 50% (9/17)
-(EngineCore pid=78453) INFO 07-03 03:42:53 [weight_utils.py:825] Prefetching checkpoint files: 60% (11/17)
-(EngineCore pid=78453) INFO 07-03 03:42:53 [weight_utils.py:825] Prefetching checkpoint files: 70% (12/17)
-(EngineCore pid=78453) INFO 07-03 03:42:53 [weight_utils.py:825] Prefetching checkpoint files: 80% (14/17)
-(EngineCore pid=78453) INFO 07-03 03:43:10 [weight_utils.py:825] Prefetching checkpoint files: 90% (16/17)
-(EngineCore pid=78453) INFO 07-03 03:43:15 [weight_utils.py:825] Prefetching checkpoint files: 100% (17/17)
-(EngineCore pid=78453) INFO 07-03 03:43:15 [weight_utils.py:843] Prefetching checkpoint files into page cache finished in 239.46s
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  12% Completed | 2/17 [04:10<29:45, 119.05s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  18% Completed | 3/17 [04:28<16:57, 72.70s/it]
-(EngineCore pid=78453)  Loading safetensors checkpoint shards:  24% Completed | 4/17 [04:46<11:02, 50.95s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  29% Completed | 5/17 [05:03<07:46, 38.84s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  35% Completed | 6/17 [05:20<05:47, 31.55s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  41% Completed | 7/17 [05:38<04:29, 26.92s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  47% Completed | 8/17 [05:55<03:34, 23.85s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  53% Completed | 9/17 [06:17<03:05, 23.20s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  59% Completed | 10/17 [06:33<02:28, 21.18s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  65% Completed | 11/17 [06:50<01:58, 19.76s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  71% Completed | 12/17 [07:07<01:33, 18.80s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  76% Completed | 13/17 [07:24<01:13, 18.37s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  82% Completed | 14/17 [07:41<00:54, 18.08s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  88% Completed | 15/17 [07:59<00:35, 17.84s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards:  94% Completed | 16/17 [08:16<00:17, 17.68s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards: 100% Completed | 17/17 [08:30<00:00, 16.45s/it]
-(EngineCore pid=78453) Loading safetensors checkpoint shards: 100% Completed | 17/17 [08:30<00:00, 30.00s/it]
-(EngineCore pid=78453) 
-(EngineCore pid=78453) INFO 07-03 03:47:45 [default_loader.py:384] Loading weights took 510.23 seconds
-(EngineCore pid=78453) INFO 07-03 03:47:46 [gpu_model_runner.py:4820] Model loading took 61.04 GiB memory and 897.267974 seconds
-(EngineCore pid=78453) INFO 07-03 03:47:55 [gpu_worker.py:436] Available KV cache memory: 61.89 GiB
-(EngineCore pid=78453) INFO 07-03 03:47:55 [kv_cache_utils.py:1319] GPU KV cache size: 253,488 tokens
-(EngineCore pid=78453) INFO 07-03 03:47:55 [kv_cache_utils.py:1324] Maximum concurrency for 8,192 tokens per request: 30.94x
-(EngineCore pid=78453) 2026-07-03 03:47:55,249 - INFO - autotuner.py:262 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=78453) 2026-07-03 03:47:55,276 - INFO - autotuner.py:268 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=78453) INFO 07-03 03:47:56 [core.py:283] init engine (profile, create kv cache, warmup model) took 9.79 seconds
-(EngineCore pid=78453) WARNING 07-03 03:47:57 [vllm.py:848] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
-(EngineCore pid=78453) WARNING 07-03 03:47:57 [vllm.py:859] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
-(EngineCore pid=78453) INFO 07-03 03:47:57 [vllm.py:1025] Cudagraph is disabled under eager mode
-(EngineCore pid=78453) INFO 07-03 03:48:08 [core.py:1210] Shutdown initiated (timeout=0)
-(EngineCore pid=78453) INFO 07-03 03:48:08 [core.py:1233] Shutdown complete
-INFO:sentence_transformers.base.model:No device provided, using cuda:0
-INFO:sentence_transformers.base.model:Loading SentenceTransformer model from sentence-transformers/all-MiniLM-L6-v2.
-[vLLM] Model loaded successfully!
-[llm] 1/25 chunk_id=ME200_CombinedNotes__0000 concepts=5 mentions+=5 total_mentions=5 (processed=1, skipped_empty=0, 920.7s)
-[llm] 25/25 chunk_id=ME200_CombinedNotes__0024 concepts=0 mentions+=0 total_mentions=77 (processed=25, skipped_empty=0, 927.5s)
-✅ Wrote mentions: out/me200/mentions.jsonl (records=77)
-[llm] building concept_cards from mentions...
-✅ Wrote concept_cards: out/me200/concept_cards.jsonl (concepts=58)
-[filter] concepts kept=5/58 (min_unique_chunks=3); mentions kept=21/77
-Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights:  38%|███▊      | 39/103 [00:00<00:00, 381.10it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 829.37it/s]
-/opt/conda/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
-  warn(
-✅ Wrote GLOBAL clusters: out/me200/context_clusters.jsonl (clusters=2)
-[pairpackets] mentions=21 chunks=25 clusters=2
-[pairpackets] 1/10 A=ENTHALPY B=INTERNAL_ENERGY
-[pairpackets] 10/10 A=INTERNAL_ENERGY B=TEMPERATURE
-✅ Wrote pairpackets: out/me200/pairpackets.jsonl (pairs=10)
-
-=== Outputs ===
-chunks:        out/me200/chunks.jsonl
-mentions:      out/me200/mentions.jsonl
-concept_cards: out/me200/concept_cards.jsonl
-clusters:      out/me200/context_clusters.jsonl
-pairpackets:   out/me200/pairpackets.jsonl
-relations:     out/me200/relations.jsonl
