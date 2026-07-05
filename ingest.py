@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, OcrAutoOptions
 from docling.chunking import HybridChunker
 
 from config import MAX_TOKENS, OUT_DIR
@@ -31,7 +33,20 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     pdf_path = str(pdf_path)
     lecture_id = Path(pdf_path).stem
 
-    converter = DocumentConverter()
+    # [JR] force_full_page_ocr=True: docling's default OCR mode only scans
+    # regions its layout model flags as bitmap images (>5% of page area).
+    # Must be set on ocr_options, not PdfPipelineOptions directly (pydantic
+    # silently drops unknown top-level kwargs, so this failed silently before).
+    pdf_pipeline_options = PdfPipelineOptions(
+        ocr_options=OcrAutoOptions(force_full_page_ocr=True)
+    )
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_pipeline_options)
+        }
+    )
+    # [JR] end force_full_page_ocr block
+
     result = converter.convert(pdf_path)
     dl_doc = result.document
 
