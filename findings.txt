@@ -1,0 +1,382 @@
+INSTRUCTKG — RUNNING FINDINGS LOG
+====================================
+Append-only log of investigation findings, diagnostics, and root causes
+across this project. Not limited to one subject — add a new dated section
+per topic as things come up. Newest entries at the bottom.
+
+Entry format:
+  [YYYY-MM-DD] <short subject line>
+  --------------------------------------
+  <findings, evidence, root cause, open questions>
+
+
+================================================================
+[2026-07-04] ME200 vs ME400 chunking discrepancy
+================================================================
+
+Observed symptom
+----------------
+- ME200: 80MB PDF, ~250 pages of handwritten notes -> only 24 chunks, 44 concept cards.
+- ME400: 20MB PDF, ~800 typed slides -> 725 chunks, 1423 concept cards.
+- Question: why does the smaller/shorter-page-count file produce ~30x more chunks?
+
+Finding 1 — chunk size is roughly constant across both files
+---------------------------------------------------------------
+Average chunk text length (chars):
+  ME200 (Qwen14B run): count=24, min=29, max=1811, avg=473.1
+  ME400 (Qwen3B run):  count=725, min=1,  max=9147, avg=464.2
+
+The chunker (docling HybridChunker, config MAX_TOKENS in ingest.py) targets a
+roughly fixed text size per chunk. Average chunk length is nearly identical
+between the two documents (473 vs 464 chars). This means chunk COUNT is
+driven by total extracted text volume, not by page count or file size.
+
+Finding 2 — most ME200 pages produced zero extractable text
+----------------------------------------------------------------
+Distinct pages referenced across all chunks:
+  ME200 (both Qwen14B and Qwen3B runs): 56 distinct pages out of ~246 total
+    (~23% of pages contributed any text at all; ~190 pages contributed nothing)
+  ME400 (Qwen3B run): 782 distinct pages out of ~805 total (~97% of pages)
+
+Total extracted characters across the whole document:
+  ME200 Qwen14B: 11,354 chars
+  ME200 Qwen3B:  11,363 chars
+  ME400 Qwen3B:  336,521 chars   (~30x more text than ME200, despite ME200's
+                                  PDF being ~4x larger in file size)
+
+Finding 3 — text quality on the pages ME200 DID extract looks like weak OCR
+----------------------------------------------------------------------------
+Sample chunk text from ME200:
+  "Air in y<control :\nBoundory surface)\n(wdo)"
+  "Ke Tang. All Rights Reserved.\nCh1-3 Ke Tang. All Rights Reserved."
+
+This reads like OCR output struggling with handwritten diagrams/text —
+garbled words, dropped content, mostly boilerplate ("All Rights Reserved")
+surviving because it's likely printed/typed text on an otherwise handwritten
+page.
+
+Sample chunk text from ME400:
+  Clean, coherent typed sentences (e.g. faculty bio text, course topics).
+
+Root cause — CONFIRMED
+------------------------
+ingest.py:34 calls `DocumentConverter()` with no explicit pipeline/OCR
+configuration, so whatever docling defaults to is what ran on both files.
+
+Checked installed docling (v2.109.0) defaults directly:
+  do_ocr = True
+  ocr_options = OcrAutoOptions(force_full_page_ocr=False, bitmap_area_threshold=0.05)
+
+"Auto" mode probes the environment at pipeline init and picks the first
+available engine in this priority order:
+  1. ocrmac                (macOS only — skipped, this is Linux)
+  2. nemotron               (not installed — skipped)
+  3. rapidocr+onnxruntime   (onnxruntime not installed — skipped)
+  4. easyocr                (not installed — skipped)
+  5. rapidocr+torch         (torch IS installed — SELECTED)
+
+So both ME200 and ME400 were processed with RapidOCR running on the torch
+backend. RapidOCR is a general printed-text/document OCR engine — it is not
+trained or tuned for handwriting recognition. This fully explains the
+observed pattern:
+
+  - ME400 (typed slides): no handwriting to struggle with -> real embedded/
+    printed text, extracted cleanly on ~97% of pages.
+  - ME200 (handwritten notes): RapidOCR produces garbled/partial output on
+    the minority of pages where it detects an OCR-able bitmap region, and
+    produces nothing usable (zero doc_items, page silently dropped) on the
+    ~77% of pages where confidence is too low or the handwritten content
+    isn't cleanly classified as an OCR-able bitmap area. Defaults of
+    force_full_page_ocr=False + bitmap_area_threshold=0.05 mean OCR is only
+    attempted on regions docling's layout model flags as bitmap images
+    covering more than 5% of the page — not a full-page OCR pass.
+
+Bottom line
+-----------
+The low ME200 chunk/concept count is not a chunker bug — chunk size is
+consistent across both runs. It's an upstream text-extraction problem:
+docling defaulted to RapidOCR (torch backend) because onnxruntime/easyocr
+aren't installed, and RapidOCR — like all three candidate engines here — is
+built for printed text, not handwriting. ~77% of ME200's pages are producing
+no usable text at all as a result.
+
+Possible next steps (not yet implemented)
+-------------------------------------------
+  - Install onnxruntime and/or easyocr to get a different default engine
+    (may or may not help much — none of these are handwriting-specialized).
+  - Set force_full_page_ocr=True in PdfPipelineOptions to stop docling from
+    skipping pages based on bitmap-region detection.
+  - Use an OCR/model actually suited for handwriting (e.g. a
+    TrOCR-handwritten checkpoint, or a vision-LLM-based transcription pass)
+    instead of relying on docling's default OCR stack for the ME200-style
+    scanned/handwritten inputs.
+
+
+================================================================
+[2026-07-05] force_full_page_ocr fix — implementation + verification
+================================================================
+
+Action taken
+------------
+Implemented "possible next step" #2 from 2026-07-04: force docling to OCR
+every page instead of only pages its layout model flags as a bitmap-image
+region >5% of page area (bitmap_area_threshold=0.05 default).
+
+Change is in ingest.py, pdf_to_chunks(), where DocumentConverter() is
+constructed. Now passes explicit PdfPipelineOptions with
+ocr_options=OcrAutoOptions(force_full_page_ocr=True).
+
+Finding 1 — first attempt was a silent no-op
+---------------------------------------------
+Initial edit passed the flag directly as PdfPipelineOptions(
+force_full_page_ocr=True). This is WRONG: force_full_page_ocr belongs to
+the nested ocr_options object (OcrAutoOptions), not to PdfPipelineOptions
+itself. Because docling's pipeline options are pydantic models with default
+"ignore extra fields" behavior, this misplaced kwarg was silently dropped —
+no error, no warning. Confirmed directly:
+
+  PdfPipelineOptions(force_full_page_ocr=True).ocr_options
+    -> OcrAutoOptions(force_full_page_ocr=False, ...)   # unchanged!
+
+A full ME200 pipeline run was executed with this broken version and
+produced IDENTICAL output to the original bug (chunks=24, same garbled
+text), confirming the setting never took effect. The only anomaly visible
+in that run's log was a benign vLLM teardown-race message
+("EngineCore died unexpectedly, shutting down client") appearing AFTER
+"Shutdown complete" — a red herring, unrelated to the OCR issue.
+
+Corrected form:
+  pdf_pipeline_options = PdfPipelineOptions(
+      ocr_options=OcrAutoOptions(force_full_page_ocr=True)
+  )
+
+Finding 2 — corrected fix verified directly against ME200 PDF
+-----------------------------------------------------------------
+Ran pdf_to_chunks() directly (ingest step only, isolated from LLM/
+clustering/relations steps) against data/me200/ME200_CombinedNotes.pdf
+with the corrected fix in place:
+
+                          Before (broken)   After (fixed)
+  Total chunks                  24               442
+  Distinct pages w/ text      56 / ~246        247 / 248   (~23% -> ~99.6%)
+  Total extracted chars       11,363           220,504     (~19x increase)
+
+Sample chunk text is also qualitatively better — coherent phrases and
+section headers are now coming through instead of mostly-garbled fragments,
+e.g.:
+  "Ch1-1 Introduction and Defining Systems Ke Tang. All Rights Reserved.
+   Objectives: Reading: 1.1, 1.2 -Thermodynamics <Identify and Explain>..."
+
+Some OCR garbling remains in spots, apparently on rotated/upside-down text
+regions, e.g.:
+  "hywon paxf Y :<sou jo4uoo) wo4sh paso10 of matter."
+This is consistent with Finding 3 from 2026-07-04 (RapidOCR is a printed-
+text engine, not handwriting-specialized) — force_full_page_ocr fixes
+page COVERAGE (Finding 2 from 2026-07-04), it does not fix OCR ACCURACY on
+handwritten/rotated content (Finding 3 from 2026-07-04, still open).
+
+Status / open items
+--------------------
+- out/me200/chunks.jsonl on disk still holds the OLD 24-chunk broken output
+  from the last full pipeline run (predates the ocr_options fix). The
+  442-chunk verified result above was computed in-memory only, via a
+  throwaway test script, and was never written to disk.
+- Not yet done: rerun the full pipeline (ingest -> llm -> clustering ->
+  pairpackets -> relations) on ME200 with the fix in place to get updated
+  concept_cards/relations output.
+- Handwriting-specific OCR accuracy (Finding 3, 2026-07-04) remains
+  unaddressed — still a candidate follow-up (TrOCR-handwritten checkpoint,
+  or vision-LLM transcription pass) if garbled text on scanned/handwritten
+  pages is still a problem after this fix.
+
+
+================================================================
+[2026-07-05] force_full_page_ocr side effect on ME400 (typed doc) + fix options
+================================================================
+
+Observed symptom
+----------------
+Ran ME400 (typed slide deck, has a clean embedded/native text layer) with
+the force_full_page_ocr=True fix from the entry above, and compared against
+the earlier default-OCR run:
+
+                       Old (default OCR)   New (force_full_page_ocr)
+  Chunks                     725                  749
+  Total chars               336,385              342,775
+
+Small net increase (+24 chunks, +6.4K chars) — much smaller than ME200's
+~18x jump, as expected since ME400 already had a good text layer. But a
+direct diff of chunk text (exact-match set difference) showed 499 old
+chunks with no exact match in the new run and 517 new chunks with no exact
+match in the old run — far more churn than the small net change suggests.
+
+Finding 1 — most of the "new" content is OCR-corrupted duplicates of
+already-clean text, not new coverage
+----------------------------------------------------------------------------
+Fuzzy-matched (difflib, cutoff=0.6) each of the 531 new-only chunks against
+the old chunk set:
+  - 465 / 531 (88%) matched an old chunk at high similarity (0.94-1.00) —
+    i.e. same underlying content, but the new version has OCR-introduced
+    corruption: stray inserted characters/digits ("Thermal 1 energy",
+    "crossplatform 1 integrated"), dropped words / case changes ("deals
+    With" for "deals with", "Thef four laws" for "The four laws"), lost
+    punctuation ("2023 -Date" -> "2023 Date").
+  - 66 / 531 (12%) had no close old match at all. Sampled these directly —
+    consistently formula/table/code-screenshot regions: thermodynamic
+    property tables ("h = 3022.9 + 320 - 280"), a Python/CoolProp code
+    screenshot, LaTeX-ish equation blocks that were previously rendered as
+    "<!-- formula-not-decoded -->" placeholders in the old run. This portion
+    is genuine new coverage, not corruption.
+
+Root cause — CONFIRMED, read docling 2.109.0 source directly
+----------------------------------------------------------------------------
+docling/models/base_ocr_model.py:
+  - Lines 89-113 (rect selection): with force_full_page_ocr=False (default),
+    OCR is only applied to detected bitmap regions covering more than
+    bitmap_area_threshold (default 0.05 = 5%) of the page. With
+    force_full_page_ocr=True, this check is skipped and the ENTIRE page is
+    always treated as one OCR region.
+  - Lines 159-186 (_combine_cells / post_process_cells): this is the actual
+    bug for ME400. When force_full_page_ocr=False, OCR cells are filtered to
+    drop any that overlap existing native/programmatic cells
+    (_filter_ocr_cells, line 116), then APPENDED to the native cells — native
+    text is preserved, OCR only fills gaps. When force_full_page_ocr=True,
+    this is skipped entirely: `combined = ocr_cells` (line 178) means native
+    cells are thrown away outright, and post_process_cells (line 163) goes
+    further and filters word_cells/char_cells down to from_ocr=True only.
+    So force_full_page_ocr doesn't just add OCR coverage — it replaces the
+    ENTIRE page's text with a fresh OCR pass, discarding a perfectly good
+    native text layer if one existed. This is exactly why already-clean
+    ME400 text came back with new OCR-typo corruption: it was never using
+    the native extraction anymore, even on pages that didn't need OCR at
+    all.
+
+Bottom line
+-----------
+force_full_page_ocr=True is a clear win for ME200 (scanned/handwritten,
+~77% of pages had ~nothing to lose). For ME400 (typed, has a real text
+layer) it's a mixed bag: recovers real content trapped in formula/code/
+table image regions, but also corrupts already-good native text on every
+other page by fully discarding it in favor of a fresh, lower-fidelity OCR
+pass. A single global force_full_page_ocr=True setting can't serve both
+document types well.
+
+Candidate fixes (not yet implemented — pipeline run in progress, action
+deferred until it completes)
+----------------------------------------------------------------------------
+1. Lower bitmap_area_threshold instead of/in addition to force_full_page_ocr
+   - Docling default is 0.05 (5% of page area). Lowering it (e.g. to ~0.0-
+     0.01) with force_full_page_ocr left False should pick up small embedded
+     raster images (screenshots, small diagrams) that fall under the current
+     5% threshold, WITHOUT discarding native text elsewhere — because the
+     append + overlap-filter path (_filter_ocr_cells) only runs when
+     force_full_page_ocr=False. Cheapest change to try, single kwarg.
+   - Caveat: only helps if the missed content is in a raster bitmap region
+     docling's layout model actually detects (page._backend.get_bitmap_rects()).
+     Vector-drawn formulas/diagrams (not embedded raster images) won't be
+     picked up by this at all — see option 2.
+
+2. Enable do_formula_enrichment=True and do_code_enrichment=True on
+   PdfPipelineOptions (pipeline_options.py:1682-1747)
+   - These are dedicated, non-OCR VLM-based recognition stages built into
+     docling specifically for math formulas (-> LaTeX) and code blocks,
+     backed by CodeFormulaVlmOptions. This looks like the correct, purpose-
+     built fix for the 12% "genuinely new" ME400 content bucket found above
+     (property-table formulas, the CoolProp code screenshot) — replacing
+     "formula-not-decoded" placeholders properly instead of leaning on
+     generic full-page OCR for that content. Doesn't touch/replace native
+     text elsewhere on the page, so no corruption risk for already-clean
+     pages. Needs a model download/runtime check (VLM-backed) before relying
+     on it — not yet verified whether the required model is available in
+     this environment.
+
+3. Document-level conditional two-pass OCR (bigger change, addresses the
+   ME200-vs-ME400 split directly)
+   - Run a first pass with default settings (force_full_page_ocr=False,
+     option-1 lowered threshold, option-2 enrichment flags on). Measure
+     extracted text density (e.g. total chars / page count).
+   - If density is above some threshold (ME400-like: dense native text
+     layer already present), keep that result as-is.
+   - If density is at/near zero (ME200-like: ~46 chars/page in the original
+     default run), re-convert that document with force_full_page_ocr=True,
+     since there's ~nothing to lose by discarding a native layer that barely
+     existed.
+   - This is a per-document heuristic, not per-page within one document;
+     docling's force_full_page_ocr is a global pipeline option with no
+     built-in per-page override, so true per-page conditional OCR would
+     require subclassing/patching base_ocr_model's rect-selection logic
+     (bigger lift, not recommended as a first step).
+   - force_backend_text=True (pipeline_options.py:1700-1709, "bypasses the
+     layout model's text detection and uses the embedded text from the PDF
+     file directly... useful for PDFs with reliable programmatic text
+     layers") may be worth testing alongside this as a way to keep native
+     text authoritative on the ME400-like branch specifically — not yet
+     tested for compatibility with the OCR path.
+
+Recommended order to try (lowest risk/effort first): 1 and 2 together first
+(cheap, no architecture change, directly targets the ME400 corruption +
+missed-formula issues) with ME200 re-tested to confirm 1 alone doesn't
+regress it back toward the original bug; fall back to 3 only if ME200 and
+ME400 still can't both be served well by a single set of global options.
+
+
+================================================================
+[2026-07-05] ME400 downstream (concept/relation) impact of force_full_page_ocr
+================================================================
+
+Context
+-------
+Full pipeline (ingest -> llm -> clustering -> pairpackets -> relations) run
+to completion on ME400 with force_full_page_ocr=True, same Qwen14B model as
+the existing default-OCR baseline (out/me400/Qwen14B/*), so this isolates
+the OCR-setting effect from model choice. Follows directly from the chunk-
+level corruption finding in the entry above.
+
+Finding — downstream impact is much smaller than the chunk-level churn
+implied
+----------------------------------------------------------------------------
+                    Old (default OCR)   New (force_full_page_ocr)   Delta
+  Chunks                   725                  749                +3.3%
+  Mentions               1,799                1,839                +2.2%
+  Concept cards          1,118                1,131                +1.2%
+  Clusters                 174                  177                +1.7%
+  Pairpackets            3,158                3,168                +0.3%
+  Relations (depends_on/part_of/none):
+    depends_on           1,608                1,693                +5.3%
+    part_of                260                  238                -8.5%
+    none                 1,290                1,237                -4.1%
+
+Despite 499 chunks disappearing and 517 new ones appearing at the text level
+(entry above), only ~13 net concepts and ~10 net relations changed overall.
+The LLM concept-extraction step appears robust to the OCR-introduced typos/
+stray characters -- it doesn't seem to be manufacturing garbage concepts out
+of corrupted text.
+
+Quality check -- sampled concept_label values unique to each run (concept_ids
+present in one run's concept_cards.jsonl but not the other's) to check for
+OCR-garbage polluting the graph. None found: both sides read as clean,
+plausible thermo concepts (old-only: "vapor cycles", "Kelvin temperature
+scale", "EOS dry air"; new-only: "entropy calculation", "Butane", "Tab Twb
+Ta", "oxidation reaction" -- consistent with the genuinely-new formula/
+property-table content identified in the entry above). No garbled/junk
+concept labels observed on either side.
+
+Caveat -- concept ID churn is larger than the net-count change suggests:
+230 concept_ids only in the old run, 243 only in the new run, out of ~1,118-
+1,131 total (~21% churn). This is NOT a quality signal in either direction --
+it's chunk-boundary reshuffling (the same content lands in differently-sized/
+ordered chunks) changing what's visible to the LLM per extraction call, not
+better or worse extraction.
+
+Bottom line / recommendation
+-----------------------------
+force_full_page_ocr=True is not badly damaging ME400 at the concept/relation
+level (no garbage-concept pollution observed), but it also isn't earning its
+keep: a ~1-5% volume bump doesn't justify the native-text-corruption risk
+already documented in the entry above, when cheaper/more targeted fixes are
+already identified and not yet implemented. See "Candidate fixes" in the
+[2026-07-05] force_full_page_ocr side effect entry (this same date, above) --
+still recommend trying options 1 (lower bitmap_area_threshold) + 2
+(do_formula_enrichment / do_code_enrichment) first, in ingest.py's
+pdf_to_chunks(), before falling back to option 3 (two-pass conditional).
+Not yet implemented -- no ingest.py changes made as a result of this entry.
