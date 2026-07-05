@@ -406,12 +406,16 @@ def main() -> None:
         args.max_pairs = None
 
     # Step 1: ingest
+    # [JR] Skip ingest if chunks.jsonl already exists in out_dir, to save time on reruns
     if "ingest" in args.steps:
-        data_dir = Path(args.data_dir)
-        pdfs = list_pdfs_in_sequence(data_dir)
-        if not pdfs:
-            raise SystemExit(f"❌ No PDFs found in ./{args.data_dir}")
-        ingest.ingest_pdfs(pdfs, out_name="chunks.jsonl", out_dir=str(out_dir))
+        if Path(chunks_path).exists():
+            print(f"[ingest] found existing {chunks_path}, skipping ingest")
+        else:
+            data_dir = Path(args.data_dir)
+            pdfs = list_pdfs_in_sequence(data_dir)
+            if not pdfs:
+                raise SystemExit(f"❌ No PDFs found in ./{args.data_dir}")
+            ingest.ingest_pdfs(pdfs, out_name="chunks.jsonl", out_dir=str(out_dir))
 
     # Step 2: LLM => mentions + concept cards
     if "llm" in args.steps:
