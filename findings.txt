@@ -380,3 +380,81 @@ still recommend trying options 1 (lower bitmap_area_threshold) + 2
 (do_formula_enrichment / do_code_enrichment) first, in ingest.py's
 pdf_to_chunks(), before falling back to option 3 (two-pass conditional).
 Not yet implemented -- no ingest.py changes made as a result of this entry.
+
+
+================================================================
+[2026-07-06] Formula and diagram content is invisible to concept extraction
+================================================================
+
+Observed symptom
+----------------
+ME200/ME400 are equation- and diagram-heavy engineering course material.
+Suspected the chunker/LLM extraction step wasn't capturing that content well.
+
+Finding -- quantified via placeholder markers in chunks.jsonl
+----------------------------------------------------------------------------
+Counted docling's HTML-comment-style placeholder markers across each
+course's chunks.jsonl:
+
+  Course   Chunks   formula-not-decoded   image/diagram placeholders
+  ME200    442      689                   0
+  ME400    725      687                   0
+  SQL      13       1                     0
+
+More than one unrendered formula per chunk on average in the ME courses.
+More strikingly: 0 image placeholders anywhere -- and confirmed via a full
+scan of every distinct "<!--...-->" marker in me400/chunks.jsonl that
+"<!-- formula-not-decoded -->" is the ONLY marker docling emits. Diagrams,
+charts, and photos don't get a placeholder at all -- they contribute zero
+text to the chunk, so they don't just render poorly, they don't exist as
+far as concept extraction is concerned.
+
+Root cause -- confirmed in docling 2.109.0 source
+----------------------------------------------------------------------------
+pipeline_options.py:1257-1265: `do_picture_description` (VLM-generated
+textual descriptions of pictures, "for accessibility and searchability")
+defaults to False. Combined with `do_formula_enrichment` also defaulting to
+False (see the [2026-07-05] force_full_page_ocr side effect entry above,
+candidate fix #2), two entire content categories -- formulas and diagrams --
+are currently invisible to the LLM concept-extraction step, in every course,
+regardless of OCR/scan setting.
+
+Bottom line
+-----------
+This is a separate, likely higher-impact gap than the OCR tuning above: it
+affects every course (not just scanned ones) and strikes directly at
+concept-extraction completeness for STEM material. Not yet implemented --
+candidate fix is enabling `do_formula_enrichment` + `do_picture_description`
+(+ `do_code_enrichment` for code screenshots, e.g. the CoolProp example from
+the ME400 entry above) on one course and re-measuring concept/relation
+coverage before rolling out further.
+
+
+================================================================
+[2026-07-06] force_full_page_ocr is now auto-detected from filename tag
+================================================================
+
+Change
+------
+ingest.py's pdf_to_chunks() no longer hardcodes force_full_page_ocr. A new
+helper, _is_scanned_from_filename(pdf_path), splits the filename stem on
+"_" and checks whether "scan" is one of the resulting tokens:
+  "..._scan.pdf"          -> True  (scanned/handwritten, no native text layer)
+  "..._text.pdf" / no tag -> False (born-digital, has a native text layer)
+
+Renamed the 5 active course PDFs to carry this tag, classification based on
+a pypdfium2 sampled-page text-density check (~10 pages/doc, same method used
+for the original ME200 vs ME400 comparison):
+  data/me200/ME200_CombinedNotes_scan.pdf   (~4 chars/sampled page avg)
+  data/me320/ME320_CombinedNotes_scan.pdf   (~4 chars/sampled page avg)
+  data/me400/ME400_CombinedNotes_text.pdf   (~265 chars/sampled page avg)
+  data/sql/3-SQL2-JOINS_Nulls_text.pdf
+  data/tam251/TAM251_CombinedNotes_text.pdf (~265 chars/sampled page avg)
+data/me200/archive/ME200_Ch1.pdf left untouched (unused leftover; not picked
+up anyway since ingest_pdfs globs *.pdf non-recursively).
+
+Why
+---
+Removes the failure mode from the [2026-07-05] entries above where the
+setting was a single hardcoded line someone had to remember to flip back
+and forth per course. Now the correct setting travels with the file.

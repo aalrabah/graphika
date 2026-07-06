@@ -88,6 +88,16 @@ Qwen14B testing on H200 GPU
     3168 pairs
     3168 relations
 
+Qwen32B testing on H200 GPU
+  me200 
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-32B-Instruct   > out/me200/run.log 2>&1 &
+    442 chunks
+    2328 mentions
+    1120 concepts
+    121 clusters
+    3468 pairs
+    3468 relations
+
 #### End of Jeffry's test log ####
 
 

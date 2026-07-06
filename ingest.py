@@ -25,6 +25,13 @@ def _safe_pages(chunk) -> List[int]:
     return sorted(pages) if pages else []
 
 
+# [JR] new helper: infer scan vs. text from a "_scan"/"_text" filename tag,
+# so switching between courses doesn't require hand-editing this file
+def _is_scanned_from_filename(pdf_path: str) -> bool:
+    tokens = Path(pdf_path).stem.lower().split("_")
+    return "scan" in tokens
+
+
 def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     """
     Convert one PDF to chunk records (text + metadata).
@@ -33,12 +40,24 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     pdf_path = str(pdf_path)
     lecture_id = Path(pdf_path).stem
 
-    # [JR] force_full_page_ocr=True: docling's default OCR mode only scans
-    # regions its layout model flags as bitmap images (>5% of page area).
-    # Must be set on ocr_options, not PdfPipelineOptions directly (pydantic
-    # silently drops unknown top-level kwargs, so this failed silently before).
+    # [JR] force_full_page_ocr: must be set on ocr_options, not PdfPipelineOptions
+    # directly (pydantic silently drops unknown top-level kwargs, so this failed
+    # silently before). Now auto-detected from the filename tag above instead
+    # of hardcoded.
+    #   False (no tag, or "_text") -- text-based material (typed slides, text
+    #     PDFs). Docling keeps the native/embedded text layer and only OCRs
+    #     bitmap regions its layout model flags (>5% of page area by default).
+    #     Safe: doesn't touch already-clean text.
+    #   True ("_scan") -- scanned/handwritten material with little to no usable
+    #     native text layer. Forces OCR on the entire page, but this DISCARDS
+    #     native text cells wherever they exist -- fine when there's ~nothing
+    #     to lose (e.g. ME200), actively harmful on typed material (re-OCRs and
+    #     corrupts already-good text; see ME400 case in findings.txt).
+    is_scanned = _is_scanned_from_filename(pdf_path)
+    print(f"   [ingest] {lecture_id}: force_full_page_ocr={is_scanned}")
+
     pdf_pipeline_options = PdfPipelineOptions(
-        ocr_options=OcrAutoOptions(force_full_page_ocr=True)
+        ocr_options=OcrAutoOptions(force_full_page_ocr=is_scanned)
     )
     converter = DocumentConverter(
         format_options={
