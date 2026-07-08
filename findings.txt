@@ -458,3 +458,533 @@ Why
 Removes the failure mode from the [2026-07-05] entries above where the
 setting was a single hardcoded line someone had to remember to flip back
 and forth per course. Now the correct setting travels with the file.
+
+
+================================================================
+[2026-07-06] ME200/Qwen3B relations step: silent failure produced 100% fake
+null results, masked as a normally-running job
+================================================================
+
+Observed symptom
+----------------
+A `main.py --data-dir data/me200 --llm-model Qwen/Qwen2.5-3B-Instruct` run
+(on the H200) appeared to still be running after 3.5 hours (ps showed
+elapsed 03:39:08) -- way past what a Qwen3B/ME200 run should take. Root
+cause was GPU contention: a separate ME400/Qwen32B enrichment smoke-test job
+was launched around the same time on the same GPU, and between the two,
+available GPU memory dropped to ~37 MiB free out of 143771 MiB total.
+
+Root cause -- confirmed by reading relation_judger.py and run.log
+----------------------------------------------------------------------------
+relation_judger.py (pre-fix) wrapped the per-batch LLM call in a bare
+try/except that caught ANY exception -- including a failed vLLM engine
+initialization from GPU memory contention -- and silently substituted
+`responses = ["{}"] * len(prompts)` for that batch, then continued to the
+next batch. Because the vLLM engine's `_loaded` flag never gets set when
+`load()` raises partway through, EVERY subsequent batch re-attempted engine
+init from scratch, hit the same GPU-memory error, and got the same fake
+substitution.
+
+Mechanics -- NOT a hang on one batch, a full grind through fake work
+----------------------------------------------------------------------------
+judge_pairpackets_file() splits ~3044 pairs into ~380 batches and works
+through that list once, not in a retry loop on a single item. For each
+batch in sequence: attempt a fresh vLLM engine init -> fail (GPU OOM) ->
+catch, substitute fake responses for that batch's 8 pairs -> write them to
+disk -> move to the next batch, where the identical cycle repeats with a
+brand-new doomed engine-init attempt. Counted 240 such cycles in run.log,
+~52s apart, each cycle producing ~100 log lines (full vLLM startup
+sequence -- config resolution, GPU memory checks, warnings -- plus a full
+multi-process Python traceback for the failure). This is why the log was
+tens of thousands of lines long despite representing wasted, repetitive
+work rather than diverse progress. Directly inspected relations.jsonl: all
+1976 records written before the job was killed had `"relation": null` with
+the identical generic justification ("No clear relation is supported by the
+provided evidence."). That justification text alone isn't a reliable
+fingerprint (it's the normal fallback whenever parsed justification is
+empty, which a genuine model output could also produce) -- what's actually
+diagnostic is the complete absence of any non-null relation across ~2000
+diverse pairs, which no working run has produced all session.
+
+The job was NOT stuck/hung in the sense of making zero progress -- it would
+have kept grinding forward through the full ~380-batch backlog and
+eventually terminated NORMALLY ("Done. Wrote N records"), indistinguishable
+in exit behavior from a real successful run, unless GPU memory freed up
+partway through (in which case only pairs processed after that point would
+get real judgments, silently mixed with fake ones before it, with no
+recorded boundary).
+
+Compounding landmine -- resume logic treats fake records as done
+----------------------------------------------------------------------------
+judge_pairpackets_file() has a resume mechanism (_load_done_pairs(out_file))
+that skips any pair already present in the existing relations.jsonl on a
+rerun. Writes are incremental (_append_jsonl per batch), which normally
+makes resume safe -- but it means the 1976 fake null records were fully
+indistinguishable from genuine "done" work to that resume logic. Resuming
+with `--steps relations` against the as-was relations.jsonl would have
+permanently skipped all 1976 corrupted pairs rather than reprocessing them.
+The corrupted file was deleted (manually, by the user, in a separate session)
+before any resume was attempted.
+
+Fix applied
+-----------
+relation_judger.py: removed the try/except around the batch LLM call (same
+"loud fail" pattern already used in adapters.py's _VLLMLocalEngine.generate_
+many -- that adapters.py change predates this session and was never
+separately documented here either). Old block commented out in a '''...'''
+string rather than deleted, matching the existing convention. Now an
+engine-init failure propagates and crashes the run immediately instead of
+silently continuing. Safe specifically because of the incremental-write +
+resume design above: crashing loses no genuinely-completed work, it just
+stops at the last real batch instead of quietly overwriting relations.jsonl
+with thousands of fake records with no error marker anywhere in the output
+data.
+
+Process note -- original run.log no longer exists
+----------------------------------------------------------------------------
+out/me200/run.log was overwritten before this entry was written. A
+follow-up pipeline run (on the A100, same shared filesystem) was pointed at
+the same --out-dir out/me200, and the shell's `> out/me200/run.log`
+redirect truncated the old file the moment that run started -- the original
+~24,600+ line log with the 240 failure cycles is gone, replaced by the new
+run's (much shorter) log. All figures in this entry (240 cycles, 1976 fake
+records, ~52s/cycle, ~100 lines/cycle) were captured by direct inspection
+during the incident, before the overwrite happened, not reconstructed
+afterward. Lesson: a shared run.log path gets silently destroyed by the
+next job that reuses it -- anything worth keeping from a log should be
+copied out under a distinct name before rerunning against the same out-dir.
+
+Bottom line
+-----------
+Not advisable to ever let this kind of failure "ride it out" hoping GPU
+memory frees up -- even in the best case (contention resolves mid-run),
+you'd get a silently mixed fake/real file with an undocumented boundary.
+Killed the runaway process, fixed the silent-failure path in
+relation_judger.py, and the underlying GPU contention itself (separate root
+cause) is being avoided going forward by moving Qwen3B tests to the
+dedicated A100 rather than sharing the H200 with larger model runs.
+
+
+================================================================
+[2026-07-06] Qwen3B/14B/32B quality comparison, and formula/code
+enrichment vs. force_full_page_ocr independence
+================================================================
+
+Context
+-------
+Full pipeline runs completed for sql, me200 (_ffp only -- non-ffp me200
+runs are the known-broken chunking from the 2026-07-04 entry, excluded),
+and me400 across Qwen2.5-3B/14B/32B-Instruct (9 runs total). Question:
+raw concept/pair/relation counts don't say which model is "best" -- more
+concepts/pairs isn't automatically better. Needed quality signals derived
+from the jsonl outputs themselves, since there's no ground-truth eval set
+for this comparison.
+
+Finding 1 -- role-tagging quality (mentions.jsonl "role" field)
+----------------------------------------------------------------------------
+% of role-tagged mentions classified "definition" vs. dumped into
+"assumption":
+                sql              me200_ffp         me400
+  Qwen3B    3.0% def / 75% assum   4.7% / 72%    5.0% / 80%
+  Qwen14B  42.2% def / 100% assum 29.3% / 67%   34.2% / 58%
+  Qwen32B  23.7% def / 83% assum  18.1% / 69%   17.9% / 60%
+
+Qwen3B almost never tags anything "definition" and collapses most mentions
+into "assumption" -- consistent across all 3 courses despite each course
+being different source material. Since the same chunks feed all three
+models, this is a model-capability signal, not a corpus artifact.
+
+Finding 2 -- relation-type discrimination (relations.jsonl depends_on vs
+part_of ratio)
+----------------------------------------------------------------------------
+  Qwen3B:  ~1:1   (me200_ffp 1130:1364, me400 1830:1957)
+  Qwen14B: ~7:1   (me200_ffp 905:128, me400 1608:260)
+  Qwen32B: ~7.5:1 (me200_ffp 2172:294, me400 3177:428)
+
+14B and 32B agree with each other on this ratio; 3B is near coin-flip
+between the two relation types, suggesting it isn't reliably distinguishing
+"depends_on" from "part_of" as a judgment task.
+
+Finding 3 -- justification grounding
+----------------------------------------------------------------------------
+% of non-null relation justifications that textually reference both
+concept names (loose token match, tokens >3 chars): Qwen14B highest
+(98.4-99.6%), Qwen32B middle (97.3-99.2%), Qwen3B lowest (95.5-97.2%).
+Small gaps but a consistent ordering across all 3 courses.
+
+Finding 4 -- inter-model agreement on shared concept-pairs (strongest
+signal)
+----------------------------------------------------------------------------
+For concept-pairs that two models both happened to extract in the same
+course, % agreement on relation type:
+                        me200_ffp              me400
+  14B vs 32B      70.3% exact / 93.7% (both nonnull)  75.4% / 92.8%
+  3B  vs 14B      34.2% exact / 48.3% (both nonnull)  44.2% / 58.5%
+  3B  vs 32B      36.9% exact / 46.7% (both nonnull)  45.6% / 58.1%
+(sql excluded -- Qwen3B found 0 pairs there entirely, and 14B/32B each
+produced only 1 relation, too sparse to compare.)
+
+14B and 32B converge with each other on ~93% of pairs where both assert a
+relation exists -- two independently-run models landing on the same
+judgment that often is strong evidence they're tracking real structure in
+the material. 3B's agreement with either larger model is barely above
+chance between two relation types.
+
+No self-loops, no directly-contradictory relation pairs (A depends_on B
+AND B depends_on A simultaneously), and no duplicate canonical concept
+labels found in any of the 9 runs -- ruling out those specific failure
+modes as a confound in the above.
+
+Bottom line -- model choice
+----------------------------
+Qwen3B is unreliable across all four signals and not recommended for
+rollout. Qwen14B and Qwen32B are mutually consistent; between them, 14B
+edges out 32B on definition-tagging rate and justification-grounding, and
+32B shows *more* "na"-tagged mentions than 14B despite being the larger
+model (more classification uncertainty, not less). Combined with 14B's
+lower compute cost, Qwen14B is the recommended model going forward.
+Caveat: none of this proves 14B/32B are "correct" in an absolute sense,
+only that they're self-consistent -- a targeted spot-check of the cases
+where 14B and 32B *disagree* with each other (a small, high-signal set)
+would be the next level of verification if needed.
+
+Finding 5 -- do_formula_enrichment/do_code_enrichment is independent of
+force_full_page_ocr
+----------------------------------------------------------------------------
+ingest.py was changed (uncommitted, in progress) to unconditionally set
+do_formula_enrichment=True and do_code_enrichment=True on PdfPipelineOptions,
+addressing the "formula/diagram content invisible to concept extraction"
+gap from the 2026-07-06 entry above. Question raised: does
+force_full_page_ocr=True (used for _scan-tagged courses) prevent this
+enrichment from working, since it discards native text cells wholesale?
+
+Read docling 2.109.0 source directly to check
+(legacy_standard_pdf_pipeline.py, layout_model.py, code_formula_model.py):
+  - force_full_page_ocr only controls which TEXT CELLS get attached to a
+    page (native vs. full-page OCR'd) -- base_ocr_model.py, already
+    documented in the 2026-07-05 entries above.
+  - The LAYOUT MODEL (which detects/labels regions including FORMULA and
+    CODE clusters) runs on the raw rendered page image
+    (layout_model.py:172, page.get_image()) -- completely independent of
+    OCR mode or text cell content. It runs after OCR in the pipe
+    (legacy_standard_pdf_pipeline.py:88-103) but does not consume OCR's
+    output.
+  - CodeFormulaModel.is_processable() (code_formula_model.py:152) fires on
+    any element the layout model already labeled FORMULA or CODE, and
+    __call__ re-recognizes that region from a CROPPED IMAGE of it
+    (el.image) using its own dedicated VLM (CodeFormulaV2) -- it never
+    reads the OCR/native text cells at all.
+
+Conclusion: force_full_page_ocr and formula/code enrichment are orthogonal
+settings. ffp=True does NOT block formula/code enrichment from working --
+the layout model still detects and labels FORMULA/CODE regions from the
+page image regardless of OCR mode, and enrichment re-recognizes those
+regions independently via image crop. This means the per-course
+_scan/_text OCR decision (2026-07-06 entry above) does not need to change,
+and enrichment is a candidate improvement on BOTH branches, not just
+_text-tagged courses. (Whether a noisier scanned page image makes the
+layout model's box detection less accurate in practice is a separate,
+untested empirical question -- not a hard incompatibility.)
+
+Status / next steps -- not yet run
+----------------------------------------------------------------------------
+Planned test sequence, in order:
+  1. Ingest-only validation (no GPU/LLM): re-run pdf_to_chunks() in
+     isolation on me400 (_text, 687 formula placeholders -- primary test
+     case), me200_ffp (_scan, 689 placeholders -- secondary, to confirm
+     enrichment also fires under ffp=True), and sql (_text, only 1
+     placeholder -- quick sanity check, low signal expected). Compare
+     old vs. new: formula-not-decoded placeholder count, chunk/char count,
+     and critically a chunk-level diff to confirm already-clean/native
+     chunks are byte-identical and not altered (the same regression check
+     that caught the force_full_page_ocr corruption on me400 in the
+     2026-07-05 entry -- the ingest.py comment claims this change is
+     "purely additive" but that has not yet been empirically verified).
+     Sample newly-recovered formula/code chunks directly to confirm real
+     LaTeX/code output, not VLM hallucination.
+  2. If clean, full pipeline rerun (ingest -> relations) on me400 and
+     me200_ffp with enrichment on, Qwen14B only (no need to redo the
+     3-model comparison -- Finding 1-4 above already settled model choice).
+     Compare concept_cards/relations against the existing Qwen14B
+     baselines, looking specifically for new concepts traceable to
+     formula/code content rather than just volume growth.
+  3. If validated, roll out to the untested courses (me320 -- _scan
+     tagged, tam251 -- _text tagged) with enrichment on and Qwen14B as the
+     model.
+
+
+================================================================
+[2026-07-07] Ingest-only validation of formula/code enrichment on ME400 --
+"purely additive" claim was FALSE, comment corrected
+================================================================
+
+Context
+-------
+Executes step 1 of the planned test sequence from the entry above. Compared
+out/me400/Qwen32B/chunks.jsonl (725 chunks, pre-enrichment, same file
+referenced in the 2026-07-06 Qwen32B run) against out/me400/chunks.jsonl
+(725 chunks, produced 2026-07-06 22:22 with do_formula_enrichment=True and
+do_code_enrichment=True, per the ingest.py change). Same source PDF
+(data/me400/ME400_CombinedNotes_text.pdf), so chunk_index aligns 1:1 across
+both files (chunk_id prefixes differ only because the PDF was renamed with
+the _text tag between runs -- see 2026-07-06 filename-tag entry).
+
+Finding 1 -- formula placeholders fully eliminated, chunk count unchanged
+----------------------------------------------------------------------------
+                              Old (pre-enrichment)   New (enrichment on)
+  Chunks                            725                    725
+  Total chars                    336,385                627,622
+  "formula-not-decoded" markers      687                      0
+
+All 687 formula placeholders identified in the 2026-07-06 entry are gone,
+replaced with real $$...$$ LaTeX. Chunk count and page coverage are
+unaffected -- this part is a clean win, as expected.
+
+Finding 2 -- the enrichment is not purely additive: CODE/FORMULA-labeled
+regions are unconditionally overwritten, even when already clean
+----------------------------------------------------------------------------
+Of 725 chunks: 483 byte-identical, 242 changed. Of the 242 changed:
+  - 193 chunks: had a formula-not-decoded placeholder in the old text --
+    exactly the intended, additive case.
+  - 49 chunks: had NO placeholder in the old text (i.e. already had usable
+    native/OCR text) but were changed anyway. 46 of these 49 contain a
+    ``` code fence in the old text -- these are CoolProp/EES-style
+    numeric-output screenshots that the layout model labels as a CODE
+    region regardless of whether that region already extracted cleanly.
+    CodeFormulaModel re-recognizes the region from a fresh image crop
+    (per the 2026-07-06 Finding 5 mechanics) and its output REPLACES the
+    old text outright -- there is no merge/fallback to the prior
+    extraction.
+This means ingest.py's original comment describing the change as "purely
+additive... doesn't touch already-clean native text elsewhere on the page"
+was correct about the OCR text-cell path (enrichment models don't touch
+that) but wrong about CODE/FORMULA-labeled *regions* specifically -- those
+get unconditionally overwritten by the enrichment models even when they
+already had good text. Comment corrected in ingest.py to describe this
+scope accurately (only text outside FORMULA/CODE-labeled regions is
+untouched).
+
+Finding 3 -- re-recognition of code/output screenshots trades readability
+for numeric-value corruption in a meaningful minority of cases
+----------------------------------------------------------------------------
+Sampled the 46 code-fence chunks directly. Most show a genuine readability
+improvement (proper variable-name formatting: "T_1 = 300 [K]" vs. the old
+"T [1 = 300 [K]" linear dump with no assignment structure). But several
+also corrupt the numeric values themselves, not just formatting -- e.g.:
+
+  idx 208: P_1 8666 [kPa]  -> new: P_1 = 8000~[kPa]        (value changed)
+  idx 156: T_3 101 [C]     -> new: T_3 = 10°C               (value changed)
+  idx 422: eta 0.6315775314437779 -> 0.631577531437779      (digit dropped)
+  idx 218: T_3 41.50876547963833  -> 41.50867547963833      (digit swapped)
+  idx 303: P_1 372.92464275358316 -> 372.92464275538316     (digits swapped)
+
+Also one case of a hallucinated caption line with no clear source (idx 45):
+new text prepends "DataUcase IN 1 YTHON USING Spyder YDLE" (garbled, not
+present in the old extraction at all) before the actual CoolProp code.
+
+Separately, 3 of the 49 non-placeholder-changed chunks (idx 114, 145, 381)
+were pre-existing $$...$$ inline math (unicode subscripts like "𝑠2 -𝑠3 =
+𝑄out 𝑚𝑇c") that got reformatted into proper LaTeX fractions
+("\frac{\dot{Q}_{out}}{\dot{m}T_{c}}") -- a clear net improvement, no
+corruption observed in this subset.
+
+Also worth flagging from the earlier idx 24-26 sample (non-code-fence
+formula region, not counted in the 46): unicode math-italic symbols for
+density (𝜌) collapsed to plain "p" in the new text, colliding with the
+already-present "Pressure: p" on the same line/list -- a semantic
+ambiguity introduced by the enrichment pass, not present in the old
+extraction. "Isochoric specific heat" also came back mis-recognized as
+"Isochroni" in one chunk and "Isomorphic" in another (same term, two
+different wrong spellings) -- consistent, low-confidence recognition
+noise on that specific label.
+
+Bottom line
+-----------
+do_formula_enrichment/do_code_enrichment successfully closes the "formula
+content invisible to extraction" gap from 2026-07-06 (0 placeholders left)
+without touching the 483 chunks outside any FORMULA/CODE-labeled region.
+But it is not the "purely additive" change the original ingest.py comment
+claimed: ~6.3% of all chunks (46/725) are CODE-region screenshots that get
+unconditionally re-recognized and, in a meaningful fraction of sampled
+cases, come back with silently altered numeric values alongside genuine
+formatting gains -- the same "looks like a clear win but corrupts a
+subset" pattern already documented for force_full_page_ocr on ME400
+(2026-07-05 entries). Likely lower-stakes here than that OCR case, since
+these are worked-example numeric results (not concept definitions) and
+concept/relation extraction cares about textual concepts more than exact
+numbers -- but not verified empirically.
+
+Not yet done
+------------
+Downstream (concept_cards/relations) impact check for this change,
+analogous to the 2026-07-05 "ME400 downstream impact of
+force_full_page_ocr" entry -- i.e. planned step 2 from the entry above,
+still outstanding.
+
+
+================================================================
+[2026-07-07] me400_enriched relations crash x2 -- GPU contention, then a
+genuine token-overflow bug in relation_judger.py -- MAX_TOKENS reverted,
+VLLM_MAX_MODEL_LEN raised via env var, main.py chunks-file bug fixed
+================================================================
+
+Context
+-------
+This is the me400_enriched run logged in testing_cmds.txt (727 chunks, 3003
+mentions, 1135 concepts, 179 clusters, 3066 pairpackets -- do_formula_enrichment/
+do_code_enrichment=True, MAX_TOKENS=6000 per the entry above). Ingest -> llm ->
+clustering -> pairpackets all completed cleanly; relations crashed twice, for
+two unrelated reasons.
+
+Crash 1 -- GPU contention on H200
+----------------------------------------------------------------------------
+relations step failed immediately on engine load: "ValueError: Free memory on
+device cuda:0 (116.87/139.81 GiB) on startup is less than desired GPU memory
+utilization (0.9, 125.83 GiB)". nvidia-smi confirmed another tenant's job
+using 120,429/143,771 MiB at 100% util with "No running processes found"
+(separate container/namespace, not ours, not killable). 0 relations written
+-- this is the "loud fail" fix from the 2026-07-06 ME200/Qwen3B entry working
+correctly (crashed instead of silently writing fake nulls). Resolved by
+re-running the relations step on the dedicated A100 instead of waiting on the
+contended H200, per the same entry's precedent. GPU choice for a downstream
+stage does not affect run quality/determinism -- same model/weights/vLLM
+version either way, pairpackets.jsonl is a deterministic on-disk artifact the
+relations step reads fresh regardless of which GPU produced it.
+
+Crash 2 -- genuine token-length overflow in relation_judger.py (A100)
+----------------------------------------------------------------------------
+Relations step got through 120/3066 pairs then crashed:
+"VLLMValidationError: ... your prompt contains at least 8193 input tokens".
+Directly tokenized all 3066 pairpackets with Qwen2.5-14B-Instruct's real
+tokenizer (offline/cached) through relation_judger's actual chat-template
+path: 23/3066 pairs exceed 8192 tokens outright (worst: 9,897, MOIST_AIR/
+VAPOR_QUALITY), 121/3066 exceed 6000. The crash pair is confirmed as
+pairpackets index 126 (ENERGY_CONSERVATION/SPECIFIC_ENTHALPY, 9,204 tokens,
+batch 15 = indices 120-127) -- exactly matches relations.jsonl having 120
+records written before the crash.
+
+Root cause: relation_judger.py has NO token-budget check anywhere in
+_select_evidence_chunks / _format_evidence_block / build_prompt_from_pairpacket
+before handing the assembled prompt (up to 3 aggregated evidence chunks) to
+vLLM. Unlike ingest.py's chunker, nothing bounds this prompt's size.
+
+Separately: VLLM_MAX_MODEL_LEN=8192 (adapters.py:222 default) turned out to
+be a self-imposed cap, not a model limit. Read Qwen2.5-14B-Instruct's config
+directly (offline, no download): max_position_embeddings=32768, rope_type=
+'default' -- native 32K support, no YaRN scaling needed.
+
+The MAX_TOKENS=6000 fix (entry above) does not actually solve either crash,
+and reverting it to the original 8191 is safe -- explained below
+----------------------------------------------------------------------------
+Traced why MAX_TOKENS=6000 was set: a reactive fix for an EARLIER, separate
+overflow ("chunk 549" during an ingest/llm-stage call, referenced in a
+config.py comment but never actually written up as its own findings.txt
+entry until now). Investigating this exposed a real, independent bug:
+
+docling's HybridChunker (ingest.py:89) is constructed with no explicit
+tokenizer argument, so it silently uses docling_core's default
+(sentence-transformers/all-MiniLM-L6-v2) -- a completely different
+vocabulary than Qwen's. MAX_TOKENS therefore has never measured chunk size in
+the same currency as VLLM_MAX_MODEL_LEN; the two numbers were only ever
+coincidentally comparable. Confirmed directly: chunk 549's actual text, at
+MAX_TOKENS=8191, is 7,770 Qwen tokens; plus role-tagging's fixed prompt
+overhead (measured directly: 636 tokens) = 8,406 -- which does exceed 8192,
+reproducing the original bug. (Concept-extraction's fixed overhead is much
+smaller, 119 tokens.) So MAX_TOKENS=6000 happened to dodge that one chunk,
+but for the wrong reason (shrinking a budget counted in the wrong tokenizer),
+while doing nothing for relation_judger's separate overflow (crash 2 above,
+which happened anyway, on 6000-token chunking) and diverging me400's
+chunking from every other course in the corpus for no real benefit.
+
+Fix applied
+-----------
+- config.py: MAX_TOKENS reverted 6000 -> 8191 (original default); comment
+  corrected to describe the tokenizer-mismatch finding instead of the
+  abandoned "leaves headroom" rationale.
+- adapters.py: VLLM_MAX_MODEL_LEN left unchanged in code for now (still
+  defaults to 8192). Raising it is being done as a command-line env var
+  override (VLLM_MAX_MODEL_LEN=16384) rather than a code default change,
+  deliberately scoped to the relations step -- llm.py's concept-extraction/
+  role-tagging calls run per chunk x concept (thousands of calls/course) and
+  don't need the bigger ceiling (worst case measured: 8,406), so there's no
+  reason to pay vLLM's reduced-KV-cache-concurrency cost (~28x concurrency at
+  8192 vs ~7x at 32768, on a fixed 233,104-token pool) on every one of those
+  calls when only relation_judger's evidence aggregation is actually at risk.
+  Will fold a verified number into the code default (with a comment) once we
+  see whether 16384 survives the run below -- not yet done.
+- main.py: fixed a latent bug found while staging a differently-named chunks
+  file for this test (chunks_enriched_8191.jsonl, to reuse existing verified
+  chunks and skip re-running the expensive OCR/enrichment ingest pass).
+  Ingest's skip-check already correctly glob-matched any chunks*.jsonl file
+  and printed "found existing, skipping ingest" -- but chunks_path itself
+  (what every downstream stage's read_jsonl call actually reads) stayed
+  hardcoded to the literal out_dir/"chunks.jsonl", so a differently-named
+  staged file would pass the skip-check and then crash with a
+  FileNotFoundError in the very next (llm) step. One-line fix:
+  chunks_path = str(next(out_dir.glob("chunks*.jsonl"), out_dir / "chunks.jsonl")).
+
+Status -- in progress, not yet verified
+----------------------------------------------------------------------------
+Old MAX_TOKENS=6000 downstream artifacts (mentions/concept_cards/
+context_clusters/pairpackets/relations.jsonl + both crash run logs) archived
+to out/me400/archive_maxtok6000/ rather than deleted, so evidence from both
+crashes above is preserved. chunks_enriched_8191.jsonl (725 chunks,
+MAX_TOKENS=8191, enrichment on, 627,622 total chars -- same file measured
+above, produced 2026-07-06 22:22) staged in out/me400/ as the chunks file to
+reuse.
+
+Relaunched (H200, uncontended at relaunch time):
+  nohup env LLM_PROVIDER=vllm VLLM_MAX_MODEL_LEN=16384 python main.py \
+    --data-dir data/me400 --out-dir out/me400 \
+    --steps ingest llm clustering pairpackets relations \
+    --llm-model Qwen/Qwen2.5-14B-Instruct > out/me400/run.log 2>&1 &
+Confirmed ingest step correctly skipped via the main.py fix above; llm stage
+running as of this entry.
+
+Open question, not yet resolved: is VLLM_MAX_MODEL_LEN=16384 actually
+sufficient for relation_judger's worst-case REAL (not theoretical-ceiling)
+evidence aggregation once mentions/pairpackets regenerate from the reverted
+8191-token chunking? A crude ceiling using the two largest known chunks
+(549: 7,770 + 496: 6,271 = 19,615 combined, before template overhead) exceeds
+16384, but that assumes those two chunks actually co-occur for the same
+concept pair, which was not true of the previous (6000-token) chunking's
+crash pair and is not yet confirmed either way for this one. If this run
+hits the same class of crash, next step is raising VLLM_MAX_MODEL_LEN for
+the relations step specifically (e.g. 32768, the model's real ceiling)
+rather than pipeline-wide.
+
+Addendum: both original logs for the two crashes above (out/me400/run.log /
+partial_run.log, and relations_run.log) were lost -- confirmed via
+~/.bash_history that run.log was silently overwritten by later reruns
+sharing the same "> out/me400/run.log" redirect target (the exact failure
+mode already documented in the 2026-07-06 ME200/Qwen3B entry's process
+note); relations_run.log's disappearance is unexplained. Recreated a
+partial reconstruction from excerpts already quoted during this session at
+out/me400/Qwen14B_enriched/6000_chunks/run_recreated.log -- clearly marked
+as a reconstruction, not a full/authentic capture.
+
+
+================================================================
+[2026-07-08] me400_enriched/8191_chunks completed -- first successful
+formula/code-enrichment run through relations -- but relations.jsonl has
+3003 lines vs. run.log's reported 3123
+================================================================
+
+The VLLM_MAX_MODEL_LEN=16384 relaunch from the entry above finished cleanly,
+end to end: 727 chunks, 1135 concept cards, 179 clusters, 3123 pairpackets.
+Output relocated to out/me400/Qwen14B_enriched/8191_chunks/. Next planned
+step: compare against the existing out/me400/Qwen14B baseline.
+
+Discrepancy: run.log ends with "Done. Wrote 3123 new records to
+out/me400/relations.jsonl", no errors/tracebacks anywhere in the log -- but
+the relocated relations.jsonl has only 3003 lines, 120 short. Checked
+relation_judger.py's write path (judge_pairpackets_file): the "wrote N"
+counter increments in lockstep with each _append_jsonl call under the same
+lock, so the script itself has no code path to over-report. The original
+out/me400/relations.jsonl no longer exists (moved before the gap was
+noticed), so old-vs-new can't be diffed and the missing 120 records can't be
+identified. Not investigated further -- recorded here in case the pattern
+repeats on a future run. Takeaway: verify `wc -l` against the log's write
+count before trusting a run's output for analysis. Plan is to rerun the
+me400_enriched pipeline once more for a verified-clean file before doing
+the baseline comparison.
