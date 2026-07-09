@@ -33,7 +33,7 @@ ALLOWED_RELATIONS = {"depends_on", "part_of"}
 BATCH_SIZE = int(os.getenv("RELATION_BATCH_SIZE", "8"))
 
 # [JR] Relation judging aggregates up to 3 evidence chunks per pair and can exceed
-# adapters.py's global 8192 default (see findings.txt 2026-07-07/2026-07-08 entries);
+# adapters.py's global 8192 default (see findings.md 2026-07-07/2026-07-08 entries);
 # 16384 has now survived two full-course runs (me400, me200) with no overflow crash.
 # Set as a default here (not in adapters.py) so llm.py's per-chunk-x-concept calls,
 # which never need the bigger ceiling, keep the higher vLLM KV-cache concurrency that
@@ -527,7 +527,7 @@ async def judge_pairpacket_batch(
     # (_append_jsonl per batch) and reruns resume via _load_done_pairs, so
     # crashing here loses no real progress -- it just stops at the last
     # genuinely-completed batch instead of quietly writing thousands of fake
-    # null records to relations.jsonl. See findings.txt for the ME200 incident
+    # null records to relations.jsonl. See findings.md for the ME200 incident
     # this came from: 1976/1976 records were fake nulls from exactly this path.
     responses = await _call_llm_batch(prompts, model=model)
     '''

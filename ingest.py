@@ -52,18 +52,18 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     #     native text layer. Forces OCR on the entire page, but this DISCARDS
     #     native text cells wherever they exist -- fine when there's ~nothing
     #     to lose (e.g. ME200), actively harmful on typed material (re-OCRs and
-    #     corrupts already-good text; see ME400 case in findings.txt).
+    #     corrupts already-good text; see ME400 case in findings.md).
     is_scanned = _is_scanned_from_filename(pdf_path)
     print(f"   [ingest] {lecture_id}: force_full_page_ocr={is_scanned}")
 
     # [JR] enable docling's formula/code recognition (CodeFormulaV2 model) so
     # equations and code blocks get real text instead of a "formula-not-decoded"
-    # placeholder -- see findings.txt 2026-07-06 entry (687-689 unrendered
+    # placeholder -- see findings.md 2026-07-06 entry (687-689 unrendered
     # formula placeholders per ME200/ME400 doc). NOT purely additive: any
     # region the layout model labels FORMULA or CODE gets unconditionally
     # re-recognized from an image crop and overwrites the existing text there,
     # even if that region already had good native/OCR text (e.g. a
-    # CoolProp/EES numeric-output screenshot) -- see findings.txt 2026-07-07
+    # CoolProp/EES numeric-output screenshot) -- see findings.md 2026-07-07
     # entry for the ME400 chunk-diff that found this, including a handful of
     # cases where re-recognition silently altered numeric values. Only text
     # OUTSIDE FORMULA/CODE-labeled regions is untouched.

@@ -12,7 +12,7 @@ def env_int(name: str, default: int) -> int:
 
 # outputs / chunking
 OUT_DIR = os.getenv("OUT_DIR", "out")
-# [JR] restored to original 8191 -- the 6000 value (see findings.txt,
+# [JR] restored to original 8191 -- the 6000 value (see findings.md,
 # 2026-07-07/2026-07-08 entries) didn't actually buy real headroom: docling's
 # HybridChunker counts MAX_TOKENS using its own default tokenizer
 # (sentence-transformers/all-MiniLM-L6-v2), not the Qwen tokenizer that
