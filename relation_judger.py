@@ -32,6 +32,14 @@ ALLOWED_RELATIONS = {"depends_on", "part_of"}
 # Batch size for LLM calls
 BATCH_SIZE = int(os.getenv("RELATION_BATCH_SIZE", "8"))
 
+# [JR] Relation judging aggregates up to 3 evidence chunks per pair and can exceed
+# adapters.py's global 8192 default (see findings.txt 2026-07-07/2026-07-08 entries);
+# 16384 has now survived two full-course runs (me400, me200) with no overflow crash.
+# Set as a default here (not in adapters.py) so llm.py's per-chunk-x-concept calls,
+# which never need the bigger ceiling, keep the higher vLLM KV-cache concurrency that
+# comes with the smaller context size. setdefault so an explicit env var still wins.
+os.environ.setdefault("VLLM_MAX_MODEL_LEN", "16384")
+
 # Cache client
 _LLM_CLIENT = get_llm_client()
 
