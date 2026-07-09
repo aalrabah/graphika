@@ -519,11 +519,24 @@ async def judge_pairpacket_batch(
 
     prompts = [bd["prompt"] for bd in batch_data]
 
+    # [JR] Remove try/except block for loud fail (same pattern as adapters.py).
+    # This used to catch ANY exception here -- including a failed vLLM engine
+    # init from GPU contention -- and silently substitute responses=["{}"] * n,
+    # which parses as relation=null with no error marker, indistinguishable
+    # from a genuine "no relation" judgment. Writes are incremental
+    # (_append_jsonl per batch) and reruns resume via _load_done_pairs, so
+    # crashing here loses no real progress -- it just stops at the last
+    # genuinely-completed batch instead of quietly writing thousands of fake
+    # null records to relations.jsonl. See findings.txt for the ME200 incident
+    # this came from: 1976/1976 records were fake nulls from exactly this path.
+    responses = await _call_llm_batch(prompts, model=model)
+    '''
     try:
         responses = await _call_llm_batch(prompts, model=model)
     except Exception as e:
         print(f"Batch LLM call failed: {e}")
         responses = ["{}"] * len(prompts)
+    '''
 
     results = []
     for i, (bd, response_text) in enumerate(zip(batch_data, responses)):
