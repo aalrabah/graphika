@@ -988,3 +988,458 @@ repeats on a future run. Takeaway: verify `wc -l` against the log's write
 count before trusting a run's output for analysis. Plan is to rerun the
 me400_enriched pipeline once more for a verified-clean file before doing
 the baseline comparison.
+
+
+================================================================
+[2026-07-08] me400_enriched/8191_chunks vs. Qwen14B baseline -- formula/code
+enrichment downstream impact, verdict: worthwhile but modest
+================================================================
+
+Context
+-------
+Rerun (per entry above) completed clean: relations.jsonl has 3472 lines,
+matching run.log's "Wrote 3472 new records" exactly (no repeat of the
+120-record gap). Compared out/me400/Qwen14B_enriched/8191_chunks/ (enrichment
+on, MAX_TOKENS=8191, VLLM_MAX_MODEL_LEN=16384) against out/me400/Qwen14B/
+(pre-enrichment baseline, same Qwen2.5-14B-Instruct model) to answer whether
+do_formula_enrichment/do_code_enrichment is worth carrying forward to future
+courses.
+
+Finding 1 -- volume
+--------------------
+                  OLD (baseline)   NEW (enriched)   Delta
+  Chunks                 725              727        +0.3%
+  Mentions             1,799            1,989        +10.6%
+  Concept cards        1,118            1,136        +1.6% net
+  Clusters               174              178        +2.3%
+  Pairpackets          3,158            3,472        +9.9%
+  Relations            3,158            3,472        +9.9%
+
+Chunk count barely moved (as expected -- enrichment replaces content within
+existing FORMULA/CODE-labeled regions, per the 2026-07-06 Finding 5 in the
+entry above, it doesn't change chunk boundaries). Mentions/pairpackets/
+relations all grew ~10%, concept cards net grew only 1.6% (see churn below).
+
+Finding 2 -- role-tagging and relation-type discrimination are unchanged
+----------------------------------------------------------------------------
+                    OLD              NEW
+  definition %      34.2%            32.7%
+  assumption %      58.0%            58.2%
+  na %               4.6%             5.2%
+  example %          3.2%             4.0%
+  depends_on:part_of ratio   6.18:1   7.85:1
+  justification grounding    96.4%    97.0%
+
+All four signals from the 2026-07-06 model-comparison entry stayed within
+noise of each other. Enrichment is not degrading (or improving) the LLM's
+judgment quality on the content it can already see -- consistent with the
+expectation that enrichment only changes what text exists in a minority of
+chunks, not how the judging/tagging models behave.
+
+Finding 3 -- stability check: relation judgments on concept pairs present in
+BOTH runs are highly consistent, no corruption signal
+----------------------------------------------------------------------------
+1,861 concept pairs were judged in both runs (same canonical A/B names).
+Of those:
+  - 83.9% exact agreement including both-null (1,562/1,861)
+  - 96.9% agreement among the 1,169 pairs where BOTH runs asserted a
+    non-null relation (1,133/1,169)
+  - 36 pairs flipped depends_on <-> part_of
+  - 109 pairs: old asserted a relation, new said none
+  - 154 pairs: new asserted a relation, old said none
+
+96.9% same-pair agreement is in the same range as the 14B-vs-32B
+cross-model agreement (92.8% on me400) from the 2026-07-06 entry -- i.e.
+enrichment changes existing judgments about as little as swapping in a
+different (comparably-sized) model would, not a red flag. This directly
+tests the corruption concern raised in the 2026-07-07 entry (CODE/FORMULA
+regions get unconditionally overwritten, sometimes with corrupted numeric
+values) -- the answer is that this corruption is not visibly propagating
+into relation-judgment instability at the pair level.
+
+Finding 4 -- new-concept yield: majority of new-only concepts DO trace to
+formula/code content, but pairpacket/relation yield from them is small
+----------------------------------------------------------------------------
+201 concept_ids appear only in the new run. Checked each one's evidence
+chunk_text for enrichment markers ($$ LaTeX blocks, ``` code fences):
+  - 107/201 (53%) linked to $$ formula evidence
+  - 28/201 (14%) linked to code-fence evidence
+  - 66/201 (33%) neither -- plain-text evidence, i.e. chunk-boundary/
+    extraction churn unrelated to enrichment (same background noise
+    pattern documented for force_full_page_ocr in the 2026-07-05 entry)
+
+So ~67% of new concepts are genuinely attributable to the enrichment
+feature working as intended (recovering formula/code content that was
+previously invisible per the 2026-07-06 "Formula and diagram content is
+invisible" entry). However, downstream structure gained from them is thin:
+  - Only 49/3,472 pairpackets (1.4%) involve any new-only concept at all
+  - 0 pairpackets pair two new-only concepts with each other
+  - Of those 49, only 17 resolved to a non-null relation (all depends_on),
+    the rest (32) judged no-relation
+  - Net: 17 new relations directly attributable to enrichment, out of
+    3,472 total (0.5%)
+
+Reason: pairpackets.py pairs concepts that co-occur in the same chunk or
+cluster. Formula/code-recovered concepts are concentrated in a small subset
+of chunks (~239 of 727, per the 2026-07-07 entry's 193 placeholder +
+46 code-region counts) and mostly co-occur with pre-existing concepts
+already in the baseline graph, not with each other -- so enrichment adds
+new nodes and a handful of new edges to the existing graph, it does not
+surface an independent sub-cluster of formula-derived structure.
+
+Finding 5 -- old-only concept loss is comparable in size to new-only churn,
+not a regression
+----------------------------------------------------------------------------
+183 concept_ids appear only in the old run. Fuzzy-matched (difflib,
+cutoff=0.6) against the 201 new-only concepts:
+  - 134/183 (73%) fuzzy-match a new-only concept (e.g. CARNOT_CYCLE_EFFICIENCY
+    -> CARMOT_CYCLE, AHU_INLET_AIR -> AHU_INLET) -- same-concept renaming/
+    chunk-boundary churn, not lost content.
+  - 49/183 (27%) have no close match -- possibly genuinely dropped.
+
+49 genuinely-dropped vs. 66 genuinely-new (Finding 4) is the same order of
+magnitude -- consistent with ordinary extraction churn already documented
+elsewhere in this log (2026-07-05 ME400 OCR entry, 2026-07-06 model-
+comparison entry), not a new failure mode introduced by enrichment.
+
+Bottom line -- recommendation
+------------------------------
+Formula/code enrichment is a small, low-risk, directionally-positive change:
+it closes a real completeness gap (formula/diagram content previously
+invisible to concept extraction, 2026-07-06 entry), the majority of new
+concepts trace directly to that recovered content, and it does not
+destabilize judgments on the ~1,861 concept pairs shared with the baseline
+(96.9% agreement, in the same range as normal model-to-model variance).
+The downstream yield is modest, though: +18 net concepts, +17 relations out
+of 3,472 (0.5%) directly attributable to the feature -- most of the
+recovered formula/code concepts don't end up paired with each other or
+judged into new relations at all, because pairpacket formation depends on
+co-occurrence with concepts already in the graph. Numeric-value corruption
+within re-recognized CODE regions (2026-07-07 entry, e.g. digit swaps in
+worked-example results) remains a known, unresolved risk, but worked-example
+numeric values are a low-stakes category for a concept/relation graph
+specifically (as opposed to a fidelity-critical use case).
+
+Recommendation for future course runs: keep do_formula_enrichment/
+do_code_enrichment ON by default for STEM-heavy courses (formula-dense
+material like ME400/ME200/TAM251) -- the completeness win is real and the
+measured corruption risk doesn't propagate into graph-level instability.
+Not worth the extra ingest/relations compute+risk for courses with little
+formula/code content (e.g. SQL, which had only 1 formula-not-decoded marker
+total in the 2026-07-06 placeholder-count entry) since there's nothing to
+recover there. Still open: the CODE-region numeric-corruption risk (2026-07-07
+entry) has no mitigation implemented -- a candidate follow-up if a future use
+case ever needs exact numeric fidelity from worked examples rather than just
+concept/relation structure.
+
+
+================================================================
+[2026-07-08] me200 (_scan, force_full_page_ocr=True) + formula/code
+enrichment -- recognition quality on handwritten pages is visibly worse
+than ME400's typed slides, driving a much higher no-relation rate
+================================================================
+
+Context
+-------
+me200 is the SCANNED/HANDWRITTEN course (data/me200/ME200_CombinedNotes_
+scan.pdf -- the same course from the original 2026-07-04 ME200-vs-ME400
+chunking entry), not a text course -- clarifying a mix-up from earlier in
+this session. Compared out/me200/Qwen14B_ffp_enriched/ (force_full_page_ocr
+=True + do_formula_enrichment/do_code_enrichment=True, both settings are
+hardcoded on in ingest.py, not per-run flags) against out/me200/Qwen14B_ffp/
+(force_full_page_ocr=True only, pre-enrichment baseline, same Qwen2.5-14B-
+Instruct model) -- same comparison methodology as the me400 entry above.
+relations.jsonl verified clean first (2195/2195 lines match run.log's
+"Wrote 2195 new records", no repeat of the 2026-07-08 me400 write-count gap).
+
+Finding 1 -- volume: concept count is flat-to-down, but pairs/relations grew
+much more than me400's equivalent comparison
+----------------------------------------------------------------------------
+                  OLD (ffp only)   NEW (ffp+enriched)   Delta
+  Chunks                 442              443             +0.2%
+  Mentions               882            1,004            +13.8%
+  Concept cards          890              867             -2.6% (net)
+  Clusters               121              120             -0.8%
+  Pairpackets          1,711            2,195            +28.3%
+  Relations            1,711            2,195            +28.3%
+
+Compare to me400's +9.9% pairpacket/relation growth (entry above) -- me200's
+growth is roughly 3x larger in relative terms, despite concept_cards actually
+shrinking net (unlike me400's +1.6%). formula-not-decoded markers confirmed
+fully eliminated (0/443 chunks), same clean win as me400 Finding 1.
+
+Finding 2 -- role-tagging, justification grounding, and pair-level stability
+all look as healthy as me400's
+----------------------------------------------------------------------------
+  definition/assumption/na/example %: OLD 27.2/66.9/1.5/4.4, NEW 26.9/65.1/
+    3.2/4.8 -- within noise, same as me400.
+  justification grounding: OLD 98.7%, NEW 99.6% -- both higher than me400's
+    96-97%, no regression.
+  969 concept-pairs judged in both runs; 98.1% agreement among the 470 where
+    both assert a non-null relation -- comparable to me400's 96.9% and to
+    the 2026-07-06 14B-vs-32B cross-model baseline (92.8%). No corruption
+    signal at the pair-stability level, same conclusion as me400.
+
+Finding 3 -- unlike me400, most of the new pairpacket volume resolves to "no
+relation," and part_of count actually shrinks
+----------------------------------------------------------------------------
+                    OLD      NEW      Delta
+  depends_on         905    1,029    +124
+  part_of            128       93     -35
+  none               678    1,073    +395   (82% of the total +484 pair growth)
+
+me400's equivalent breakdown (this same date, entry above) went the other
+way: none DECREASED (-146) while depends_on absorbed nearly all the growth
+(+457). For me200, 82% of the new pairpacket volume is being judged "no
+relation" rather than becoming a new edge, and part_of shrinks in absolute
+terms despite more pairs overall being formed. Net new relation edges:
++124 depends_on, -35 part_of = +89 net, out of +484 new pairs -- a much
+lower conversion rate than me400's (+460 net relations out of +314 new pairs,
+i.e. more relations were created than net new pairs, because me400's
+None bucket also shrank).
+
+Finding 4 -- root cause: formula/code enrichment's VLM recognition is
+visibly noisier on handwritten source pages than on me400's typed slides
+----------------------------------------------------------------------------
+Sampled the 157/443 chunks (35%) containing new $$ LaTeX blocks directly
+(this is a far higher fraction of chunks than me400's, consistent with
+handwritten engineering notes being more equation-dense per page). Quality
+is a mixed bag, clearly worse on average than the me400 formula samples in
+the 2026-07-07 entry:
+  - Some formulas are clean and correct, e.g. chunk 0072:
+    "\dot{Q} = -0.2[1-e^{(-0.05t)}]" -- a legible first-order decay
+    expression.
+  - Many are visibly garbled/non-parseable, e.g. chunk 0132:
+    "\frac{1}{tan(20)}\sqrt{3}(state)(2), T_2 = \frac{P_2 v_2}{R} O" --
+    text and math fragments interleaved with no coherent structure; chunk
+    0261's Carnot-efficiency-shaped formula has mismatched/duplicated
+    subscripts; a MASS_BALANCE evidence sample showed
+    "\frac{dE}{dt} = \underbrace{\dot{Q}}_{\widehat{A}_1-\dot{Q}_{A2}} -
+    \dot{y} S e d y \underbrace{...}" -- not a coherent physical equation.
+  - The surrounding plain-text OCR in these same chunks is also garbled
+    ("cydles", "reservoixs", "α pey mole babis") -- but that's the
+    pre-existing handwriting-OCR problem from the 2026-07-04 entry, not new
+    from enrichment. What IS new here is that the formula-recognition VLM
+    inherits the same handwriting-vs-print quality gap: CodeFormulaModel
+    re-recognizes a cropped image of the FORMULA-labeled region (per the
+    2026-07-06 Finding 5 mechanics, unchanged), and a handwritten equation
+    crop is a much harder recognition target than me400's typed/printed
+    equations were.
+
+This plausibly explains Finding 3 above: if a large fraction of the newly
+recovered formula evidence is only partially legible, the relation-judging
+LLM is (correctly) declining to assert a confident relation from it more
+often than it does on me400's cleaner recovered formulas, rather than
+hallucinating structure from noise -- a graceful-degradation read, not a
+corruption one, but it does mean the "more pairs" growth here is lower
+quality/yield than me400's equivalent growth.
+
+Finding 5 -- concept-label quality remains clean despite noisier evidence
+----------------------------------------------------------------------------
+Sampled only-new concept_id labels directly (160 total, 108 formula-linked +
+7 code-linked + 45 neither, same methodology as me400 Finding 4): labels
+read as legitimate thermo/heat-transfer concepts (CARNOT_CYCLES,
+CONVECTION_HEAT_TRANSFER, ADIABATIC_INDEX, COMPRESSIBLE_SYSTEMS,
+CONVERGING_DIVERGING_NOZZLE, 1_D_CONDUCTION, etc.) -- no garbled/junk labels
+observed, consistent with the me400 finding and the 2026-07-05/06 OCR-typo-
+robustness findings: the concept-extraction step tolerates noisy underlying
+text/evidence without manufacturing garbage concept names, even when (per
+Finding 4) the formula content backing those concepts is itself partly
+illegible. 55/183 only-old concepts (30%) have no fuzzy match in the
+only-new set (vs. me400's 49/183, 27%) -- comparable background churn, not a
+new regression.
+
+Bottom line
+-----------
+Formula/code enrichment closes the same completeness gap on me200 as it did
+on me400 (0 formula-not-decoded markers, plausible new concept labels,
+stable pair-level agreement, no corruption propagating into relation
+judgments) -- so it is not actively harmful here either, and the earlier
+per-course _scan/_text tagging (2026-07-06 entry) does not need to change on
+account of this test. But the YIELD is meaningfully worse: ~3x the relative
+pairpacket growth of me400 converts mostly into "no relation" judgments
+(82% of new pairs) rather than new edges, because the underlying formula
+recognition is measurably noisier on handwritten source pages than on
+me400's typed slides -- the same fundamental handwriting-vs-print gap
+already documented for OCR text in the 2026-07-04 entry now also shows up
+in the VLM-based formula/code recognition path. Practical implication for
+future scanned/handwritten courses (e.g. me320, also _scan-tagged): expect
+enrichment to add graph volume with a good chunk resolving to no-op
+judgments rather than me400-level relation yield -- still worth leaving on
+(no evidence of harm, some genuine recovered concepts/relations), but
+temper yield expectations rather than assuming me400's ~+18-net-concepts/
++17-relations profile will repeat on scanned material.
+
+
+================================================================
+[2026-07-08] VLLM_MAX_MODEL_LEN=16384 promoted from manual override to a
+relation_judger.py default; parameters now settled, next courses are
+production rollout, not comparisons
+================================================================
+
+Change made
+-----------
+relation_judger.py now sets `os.environ.setdefault("VLLM_MAX_MODEL_LEN",
+"16384")` right before constructing `_LLM_CLIENT`, rather than requiring
+`VLLM_MAX_MODEL_LEN=16384` to be passed manually on the command line every
+time (per the 2026-07-07 entry's "will fold into the code default once we
+see whether 16384 survives the run" -- it has now survived two full clean
+runs, me400 and me200, with no token-overflow crash).
+
+Deliberately NOT changed: adapters.py's own default (still 8192). Bumping
+that global default would also raise max_model_len for llm.py's per-chunk-
+x-concept calls (thousands per course), which the 2026-07-07 entry already
+established don't need the bigger ceiling (worst measured case 8,406
+tokens) and would pay a real cost for no benefit -- vLLM's KV-cache-backed
+concurrency drops roughly 28x -> 7x going from 8192 to 32768 on this box's
+fixed KV-cache pool. relation_judger.py is imported lazily inside
+run_relation_judger() (main.py:273), not at main.py's top-level imports, so
+this setdefault only ever fires when the relations step actually runs --
+confirmed it can't leak into llm.py's engine load even when both stages run
+in the same main.py process. `setdefault` (not a hard assignment) so an
+explicit env var still overrides it, e.g. if a future course's evidence
+aggregation needs more than 16384 (the 2026-07-07 entry flagged a
+theoretical 19,615-token ceiling from the two largest known me400 chunks
+co-occurring, not yet observed in practice).
+
+Where things stand -- parameters now settled across both material types
+----------------------------------------------------------------------------
+Per-course auto-detected via filename tag (2026-07-06 entry):
+  - force_full_page_ocr: True for _scan (handwritten/no native text layer),
+    False for _text (born-digital).
+  - do_formula_enrichment / do_code_enrichment: hardcoded True always
+    (ingest.py) -- validated as a net positive on both a _text course
+    (me400, 2026-07-08 entry) and a _scan course (me200, 2026-07-08 entry):
+    closes the formula/diagram invisibility gap on both, no corruption
+    propagating into relation-judgment stability (96.9%/98.1% pair
+    agreement respectively), though yield is lower on scanned/handwritten
+    material since the formula-recognition VLM inherits the same
+    handwriting-vs-print quality gap already known from OCR (2026-07-04
+    entry).
+  - Model: Qwen2.5-14B-Instruct (2026-07-06 4-signal comparison across
+    sql/me200/me400) -- not re-validated against enriched data specifically,
+    but role-tagging %/relation-type ratio/justification-grounding all
+    stayed stable across the enrichment on/off comparisons for both me400
+    and me200, i.e. the signals that drove the model pick aren't sensitive
+    to enrichment being on. Judged not worth a fresh 3-model bake-off on
+    enriched output given that stability.
+  - VLLM_MAX_MODEL_LEN: 16384 default for the relations step specifically
+    (this entry), 8192 elsewhere (unchanged).
+
+Plan -- remaining courses are rollout, not further comparison
+----------------------------------------------------------------------------
+Two courses have data on disk but zero pipeline output yet:
+  - data/me320/ME320_CombinedNotes_scan.pdf -- _scan, same category as
+    me200 (handwritten). No new settings question here -- run with the
+    settled parameters above. Expect a similar profile to me200's
+    2026-07-08 entry (formula-not-decoded fully eliminated, but a good
+    chunk of the added pairpacket volume likely resolving to no-relation
+    judgments rather than me400-level net-new-relation yield, since it's
+    also handwritten source material). Worth a quick post-run sanity check
+    (relations.jsonl line count vs. run.log's reported write count, formula-
+    placeholder count = 0) but not a full repeat study.
+  - data/tam251/TAM251_CombinedNotes_text.pdf -- _text, same category as
+    me400 (typed/born-digital). Same reasoning -- run with settled
+    parameters, expect an me400-like profile, quick sanity check only.
+  - data/sql/3-SQL2-JOINS_Nulls_text.pdf has old output (out/sql/) from the
+    pre-enrichment 2026-07-06 model comparison but hasn't been rerun with
+    current settings. Low priority: only 1 formula-not-decoded marker
+    existed in the whole course (2026-07-06 placeholder-count entry), so
+    enrichment has ~nothing to recover there either way.
+
+
+================================================================
+[2026-07-09] me320 + tam251 rollout sanity check clean -- but surfaced a
+pipeline-wide bug: concept_cards.jsonl is never regenerated against the
+min_unique_chunks filter, so 76-93% of every course's "concept cards" are
+orphaned (zero relations, below the pipeline's own evidence threshold)
+================================================================
+
+Context
+-------
+Ran the me320/tam251 rollout planned in the entry above (settled parameters,
+no new comparison needed). Quick sanity check per that plan: relations.jsonl
+line count vs. run.log's reported write count, formula-not-decoded placeholder
+count.
+
+Finding 1 -- both rollout runs are clean
+----------------------------------------------------------------------------
+  me320  (out/me320/Qwen14B_ffp_enriched/):  1295/1295 pairpackets->relations
+    match run.log's "Wrote 1295 new records"; 0/424 chunks have a
+    formula-not-decoded placeholder.
+  tam251 (out/tam251/Qwen14B_enriched/):       95/95 pairpackets->relations
+    match run.log's "Wrote 95 new records"; 0/73 chunks have a
+    formula-not-decoded placeholder.
+depends_on:part_of ratios (me320 629:48 ~13:1, tam251 59:7 ~8.4:1) land in
+the same range as the me200 (~11:1) and me400 (~7.85:1) baselines -- no
+red flags on relation-type discrimination.
+
+Finding 2 -- concept_cards.jsonl count (289) exceeds mentions.jsonl count
+(94) for tam251, which is structurally impossible if cards are built from
+mentions as documented
+----------------------------------------------------------------------------
+llm.py's build_concept_cards() groups its output strictly from the `mentions`
+list passed in (by_concept = group by concept_id, one card per key) -- card
+count can never exceed unique concept_ids in mentions. But tam251's
+concept_cards.jsonl has 289 unique concept_ids while mentions.jsonl has only
+94 records / 21 unique concept_ids -- 268 cards reference concepts with zero
+records in the mentions file sitting next to them.
+
+Root cause -- main.py's llm step filters mentions.jsonl AFTER cards are built,
+and never rebuilds cards
+----------------------------------------------------------------------------
+main.py's "llm" step (around line 423-436):
+  1. run_llm_and_cards() writes mentions.jsonl (unfiltered) and, using that
+     same unfiltered list, builds and writes concept_cards.jsonl.
+  2. main.py then re-reads mentions.jsonl, calls
+     filter_mentions_by_min_unique_chunks(mentions, min_unique_chunks=3)
+     -- drops any concept appearing in fewer than 3 distinct chunks -- and
+     overwrites mentions.jsonl with the filtered set.
+concept_cards.jsonl is never regenerated against the filtered list. File
+mtimes confirm the ordering directly: tam251's concept_cards.jsonl finished
+writing at 03:24:09, mentions.jsonl's filtered rewrite finished at 03:24:14,
+5 seconds later.
+
+Clustering and pairpackets both read mentions_path (the on-disk, filtered
+file) per main.py's step wiring, so the actual graph (clusters/pairpackets/
+relations) is NOT corrupted by this -- only concept_cards.jsonl is stale.
+
+Finding 3 -- this is not tam251-specific, it's present in every course run
+to date, confirmed via each run.log's own "[filter] concepts kept=X/Y" line
+----------------------------------------------------------------------------
+                          concept_cards.jsonl   kept after filter   orphaned
+  me200_ffp_enriched            867                  142            83.6%
+  me400_enriched (8191_chunks)  1,136                274            75.9%
+  me320                         889                  118            86.7%
+  tam251                        289                   21            92.7%
+
+76-93% of every course's concept_cards.jsonl is for concepts below the
+pipeline's own min_unique_chunks=3 evidence bar and absent from
+relations.jsonl entirely (relations only ever reference concepts that
+survived the filter, since pairpackets is built from the filtered
+mentions.jsonl). This does NOT invalidate the 2026-07-08 me400/me200
+enrichment A/B comparisons above -- both sides of each comparison used the
+same unfiltered concept_cards.jsonl consistently, so the relative deltas
+still hold -- but it does mean concept_cards.jsonl as a standalone artifact
+has never matched the filtered graph on any course run so far.
+
+Downstream impact -- not yet measured
+----------------------------------------------------------------------------
+knowledge_graph_visualization.ipynb and students_mapping.ipynb consume
+concept_cards.jsonl directly (per CLAUDE.md). Any code path in those
+notebooks that builds a node list or joins against concept_cards.jsonl will
+include hundreds of orphaned, zero-relation concept nodes per course. Not
+yet checked whether either notebook already filters these out independently
+(e.g. by only rendering concepts that appear in relations.jsonl) or whether
+they currently display the inflated/orphaned set as-is.
+
+Status -- logged, not fixed
+----------------------------------------------------------------------------
+Decision: log now, fix later, to keep momentum on bringing in remaining
+course content first. Candidate fix (not yet implemented): rebuild/rewrite
+concept_cards.jsonl from the filtered mentions.jsonl immediately after the
+min_unique_chunks filter runs in main.py's llm step (~line 436), or emit a
+separate concept_cards_filtered.jsonl and point the notebooks at that
+instead. Affects every existing course's concept_cards.jsonl (me200, me400,
+me320, sql, tam251) -- a fix should include regenerating those, not just
+changing behavior for future runs, if the notebooks are to be trusted.
