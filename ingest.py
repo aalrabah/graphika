@@ -56,8 +56,25 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     is_scanned = _is_scanned_from_filename(pdf_path)
     print(f"   [ingest] {lecture_id}: force_full_page_ocr={is_scanned}")
 
+    # [JR] enable docling's formula/code recognition (CodeFormulaV2 model) so
+    # equations and code blocks get real text instead of a "formula-not-decoded"
+    # placeholder -- see findings.txt 2026-07-06 entry (687-689 unrendered
+    # formula placeholders per ME200/ME400 doc). NOT purely additive: any
+    # region the layout model labels FORMULA or CODE gets unconditionally
+    # re-recognized from an image crop and overwrites the existing text there,
+    # even if that region already had good native/OCR text (e.g. a
+    # CoolProp/EES numeric-output screenshot) -- see findings.txt 2026-07-07
+    # entry for the ME400 chunk-diff that found this, including a handful of
+    # cases where re-recognition silently altered numeric values. Only text
+    # OUTSIDE FORMULA/CODE-labeled regions is untouched.
+    # To restore docling's default (no enrichment), set both back to False.
+    ENABLE_FORMULA_ENRICHMENT = True
+    ENABLE_CODE_ENRICHMENT = True
+
     pdf_pipeline_options = PdfPipelineOptions(
-        ocr_options=OcrAutoOptions(force_full_page_ocr=is_scanned)
+        ocr_options=OcrAutoOptions(force_full_page_ocr=is_scanned),
+        do_formula_enrichment=ENABLE_FORMULA_ENRICHMENT,
+        do_code_enrichment=ENABLE_CODE_ENRICHMENT,
     )
     converter = DocumentConverter(
         format_options={
