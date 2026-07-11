@@ -1,3 +1,10 @@
+#### NOTE (2026-07-11): this .txt is now for quick manual notes only ####
+The structured, course-organized, kept-stats-backfilled version of this log
+lives in testing_cmds.md — that's the canonical reference going forward.
+Keep using this file for fast, no-formatting notes jotted while a run is
+in progress; fold anything worth keeping into testing_cmds.md afterward.
+####
+
 #### Jeffry's test log ####
 
 Google Drive backup (rclone, remote "gdrive:") -- addressed by folder ID since
@@ -138,19 +145,62 @@ Qwen32B testing on H200 GPU
     5108 relations
   
 
+TEMPLATE
+  classNUM
+    bash command
+     chunks
+     mentions (kept )
+     concepts (kept )
+     clusters
+     pairs
+     relations
+
   me320
     nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me320   --out-dir out/me320   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me320/run.log 2>&1 &
+    424 chunks
+    2729 mentions (kept 832)
+    889 concepts (kept 118)
+    122 clusters
+    1295 pairs
+    1295 relations
 
   me270
     nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me270   --out-dir out/me270   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me270/run.log 2>&1 &
+    716 chunks
+    3364 mentions (kept 1006)
+    2225 concepts (kept 190)
+    206 clusters
+    819 pairs
+    819 relations
 
   me310
     nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me310   --out-dir out/me310   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me310/run.log 2>&1 &
+    235 chunks
+    1017 mentions (kept 501)
+    550 concepts (kept 94)
+    64 clusters
+    928 pairs
+    928 relations
+
+  me340
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me340   --out-dir out/me340   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me340/run.log 2>&1 &
+    306 chunks
+     mentions (kept )
+     concepts (kept )
+     clusters
+     pairs
+     relations
+
 
   tam251
     nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/tam251   --out-dir out/tam251   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/tam251/run.log 2>&1 &
+    73 chunks
+    383 mentions (kept 94)
+    289 concepts (kept 21)
+    21 clusters
+    95 pairs
+    95 relations
 
-  
 
 #### End of Jeffry's test log ####
 

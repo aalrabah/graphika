@@ -1,0 +1,249 @@
+# Pipeline run log — by course
+
+This is the **canonical** pipeline run log, grouped by course first and model
+second (see project convention). It started as a reorganized, derived view of
+`testing_cmds.txt`, but as of 2026-07-11 this is the file to update going
+forward — log new runs here directly, including `(kept)` stats at the time
+of the run.
+
+`testing_cmds.txt` is kept around for fast, no-formatting notes jotted while
+a run is in progress (see the note at its top) — fold anything worth keeping
+from it into this file afterward. It is no longer the append point for
+structured run records.
+
+## How to read "(kept)"
+
+Since `bcb76fc`/filter step, the pipeline logs a line like:
+
+```
+[filter] concepts kept=190/2225 (min_unique_chunks=3); mentions kept=1006/3364
+```
+
+`kept` is the count surviving the `min_unique_chunks` filter before
+clustering/pairing. Recent entries in `testing_cmds.txt` (me320, me270, me310,
+tam251) already record this as `mentions (kept N)` / `concepts (kept N)`. For
+older entries that predate that convention, values below were **backfilled
+from surviving `out/**/run.log` files** — never guessed. Where no log
+survived, the cell is left blank.
+
+**Important caveat found while backfilling:** `out/<course>/run.log` gets
+overwritten every time a run reuses the same `--out-dir`, so most of the
+early Qwen3B/14B/32B runs against the shared `out/sql`, `out/me200`,
+`out/me400` paths have no surviving log — except where an archived
+per-model subdirectory (e.g. `out/me200/Qwen14B_ffp/`) happened to preserve
+a copy. That's the only reason backfill was possible for some legacy rows
+and not others.
+
+**Discrepancies found (flagged inline, not silently corrected — `testing_cmds.txt` is untouched):**
+- In the legacy (pre-"kept") section, the plain `mentions` number is
+  inconsistently either the **raw** mentions count or the **already-kept**
+  count depending on the row (e.g. sql/Qwen14B's "6 mentions" = kept 6/45,
+  but sql/Qwen32B's "59 mentions" = raw, kept was actually 6/59). Treat the
+  backfilled kept column as authoritative where the two conflict.
+- `me320`: recorded raw mentions = 2729, but the surviving log shows raw
+  mentions = 1719 (kept 832/1719 does match the recorded "kept 832").
+- `me400_ffp`: recorded clusters = 171, but the surviving log shows
+  clusters = 177.
+- `me340`: run was **still in progress** at the time of writing (started
+  2026-07-10 23:43 UTC, PID 1572, had only just finished loading the model
+  weights as of the last check) — mentions/concepts/clusters/pairs/relations
+  aren't produced yet, so they're left blank rather than backfilled.
+
+---
+
+## sql
+
+### Qwen2.5-3B-Instruct (A100)
+`LLM_PROVIDER=vllm python main.py --data-dir data/sql --steps ingest llm clustering pairpackets --out-dir out/sql --llm-model Qwen/Qwen2.5-3B-Instruct`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 13 | 4 / — | 57 / — | 2 | 0 | — (relations step not run) |
+
+*No surviving `run.log` for this run — not backfillable.*
+
+### Qwen2.5-14B-Instruct (H200)
+`# [JR] switched to nohup + log so the run survives Jupyter connection drops`
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/sql --out-dir out/sql --llm-model Qwen/Qwen2.5-14B-Instruct > out/sql/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 13 | 45 / 6 | 35 / 2 | 3 | 1 | 1 |
+
+### Qwen2.5-32B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/sql --out-dir out/sql --llm-model Qwen/Qwen2.5-32B-Instruct > out/sql/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 13 | 59 / 6 | 47 / 2 | 3 | 1 | 1 |
+
+### Other sql commands logged (no stats recorded)
+- `LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py --data-dir data/sql --steps ingest llm clustering pairpackets --out-dir out/sql --llm-model meta-llama/Llama-3.2-3B-Instruct`
+- `python relation_judger.py --in out/sql/pairpackets.jsonl --out out/sql/relations_fixed.jsonl --model "meta-llama/Llama-3.2-3B-Instruct" --batch-size 32 --concurrency 12`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output`
+- `python main.py --steps clustering pairpackets relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output`
+- `python main.py --steps relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output_llama8b/`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output_llama3b/`
+
+---
+
+## me200
+
+### Qwen2.5-3B-Instruct (A100)
+
+`LLM_PROVIDER=vllm python main.py --data-dir data/me200 --steps ingest llm clustering pairpackets --out-dir out/me200 --llm-model Qwen/Qwen2.5-3B-Instruct`
+
+| Variant | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|---|
+| Ch1 (handwritten scans) | 2 | 2 / — | 2 / — | — | — | ERROR: chunks must have more than one neighbor (I think) |
+| CombinedNotes (handwritten scans, weak concept extraction) | 24 | 29 / — | 67 / — | 6 | 11 | — |
+| CombinedNotes, same data + relations step (`--out-dir out/me200`, no `--steps` filter) | 24 | 29 / — | 67 / — | 6 | 11 | 11 |
+
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me200 --out-dir out/me200 --llm-model Qwen/Qwen2.5-3B-Instruct > out/me200/run.log 2>&1 &`
+
+| Variant | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|---|
+| CombinedNotes, force_full_page_ocr | 442 (labeled `chunks_ffp` in source) | 2413 / 1139 | 1301 / 176† | 116 | 3109 | 3109 |
+
+† log's filter line shows denominator 1300, not 1301 (concept_cards count logged one write ahead of the filter check — not fixed here, reported as-is).
+
+*Ch1 and the two default-OCR CombinedNotes runs above have no surviving `run.log` — not backfillable.*
+
+### Qwen2.5-14B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me200 --out-dir out/me200 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me200/run.log 2>&1 &`
+(add `VLLM_MAX_MODEL_LEN=16384` for the enriched variant)
+
+| Variant | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|---|
+| default | 24 | 53 / 7 | 44 / 2 | 2 | 1 | 1 |
+| force_full_page_ocr (ffp) | 442 | 1760 / 882 | 890 / 130 | 121 | 1711 | 1711 |
+| ffp + enriched (`VLLM_MAX_MODEL_LEN=16384`) | 443 | 1833 / 1004 | 867 / 142 | 120 | 2195 | 2195 |
+
+### Qwen2.5-32B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me200 --out-dir out/me200 --llm-model Qwen/Qwen2.5-32B-Instruct > out/me200/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 442 | 2328 / 1225 | 1120 / 182 | 121 | 3468 | 3468 |
+
+Recorded simply as "me200" in the original log, but the chunk count (442)
+and the archived dir name (`out/me200/Qwen32B_ffp/`) confirm this was the ffp
+config, not default OCR.
+
+---
+
+## me400
+
+### Qwen2.5-3B-Instruct (A100)
+`LLM_PROVIDER=vllm python main.py --data-dir data/me400 --out-dir out/me400 --llm-model Qwen/Qwen2.5-3B-Instruct`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 725 | 2300 / — | 1423 / — | 180 | 4777 | 4777 |
+
+*No surviving `run.log` — not backfillable.*
+
+### Qwen2.5-14B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me400 --out-dir out/me400 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me400/run.log 2>&1 &`
+(add `VLLM_MAX_MODEL_LEN=16384` for the enriched variant)
+
+| Variant | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|---|
+| default | 725 | 2793 / 1799 | 1118 / 255 | 174 | 3158 | 3158 |
+| force_full_page_ocr (ffp) | 749 | 2848 / 1839 | 1131 / 258 | 171 (recorded) / **177 (log — mismatch)** | 3168 | 3168 |
+| enriched (`VLLM_MAX_MODEL_LEN=16384`) | 727 | 2991 / 1989 | 1136 / 274 | 178 | 3472 | 3472 |
+
+A superseded "buggy_run" attempt for the enriched config also survives on
+disk (2997/1138/172/3123) — not used here since the final run in the parent
+dir replaced it.
+
+### Qwen2.5-32B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me400 --out-dir out/me400 --llm-model Qwen/Qwen2.5-32B-Instruct > out/me400/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 725 | 3600 / 2494 | 1254 / 320 | 174 | 5108 | 5108 |
+
+---
+
+## me320 — Qwen2.5-14B-Instruct (H200), ffp + enriched
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me320 --out-dir out/me320 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me320/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 424 | 2729 (recorded) / **1719 (log — mismatch)**, kept 832 | 889 / 118 | 122 | 1295 | 1295 |
+
+Kept counts (832 mentions, 118 concepts) match the log exactly; only the raw
+mentions total disagrees with what's recorded in `testing_cmds.txt`.
+
+## me270 — Qwen2.5-14B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me270 --out-dir out/me270 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me270/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 716 | 3364 / 1006 | 2225 / 190 | 206 | 819 | 819 |
+
+Fully verified against `run.log` — no discrepancies.
+
+## me310 — Qwen2.5-14B-Instruct (H200)
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me310 --out-dir out/me310 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me310/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 235 | 1017 / 501 | 550 / 94 | 64 | 928 | 928 |
+
+Fully verified against `run.log` — no discrepancies.
+
+## me340 — Qwen2.5-14B-Instruct (H200) — **run in progress**
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me340 --out-dir out/me340 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me340/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 306 | — | — | — | — | — |
+
+Started 2026-07-10 23:43 UTC (PID 1572, still running as of this writing);
+the log only shows the model finishing weight-loading, so downstream counts
+genuinely don't exist yet. Re-run the backfill once it completes.
+
+## tam251 — Qwen2.5-14B-Instruct (H200), enriched
+`nohup env LLM_PROVIDER=vllm python main.py --data-dir data/tam251 --out-dir out/tam251 --llm-model Qwen/Qwen2.5-14B-Instruct > out/tam251/run.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 73 | 383 / 94 | 289 / 21 | 21 | 95 | 95 |
+
+Fully verified against `run.log` (`out/tam251/Qwen14B_enriched/run.log`) — no
+discrepancies.
+
+---
+
+## anlp / algo (predecessor's commands — no stats recorded)
+
+These predate the stats-tracking convention entirely; only commands were
+logged, so there's nothing to backfill.
+
+- `LLM_PROVIDER=hf python main.py --steps ingest llm clustering pairpackets --out-dir out --llm-model meta-llama/Llama-3.2-3B-Instruct`
+- `LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py --data-dir data/algo --steps ingest llm --out-dir out/algo --llm-model meta-llama/Llama-3.2-3B-Instruct`
+- `LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py --data-dir data/anlp --steps ingest llm clustering pairpackets --out-dir out/anlp --llm-model meta-llama/Llama-3.2-3B-Instruct`
+- `LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python relation_judger.py --data-dir data/anlp --out-dir out/anlp --llm-model meta-llama/Llama-3.2-3B-Instruct`
+- `python relation_judger.py --in out/anlp/pairpackets.jsonl --out out/anlp/relations_fixed.jsonl --model "meta-llama/Llama-3.2-3B-Instruct" --batch-size 8`
+- `python relation_judger.py --in out/algo/pairpackets.jsonl --out out/algo/relations_fixed.jsonl --model "meta-llama/Llama-3.2-3B-Instruct" --batch-size 32 --concurrency 12`
+- `python main.py --data-dir data/anlp --out-dir out/anlp --llm-model "meta-llama/Llama-3.1-8B-Instruct"`
+- `LLM_PROVIDER=hf RELATION_DEBUG=1 RELATION_DEBUG_N=3 python main.py --steps ingest llm clustering pairpackets relations --data-dir data/sql --out-dir out/sql --llm-model "meta-llama/Llama-3.1-8B-Instruct" --batch-size 32 --concurrency 12`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir testing`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output`
+- `python main.py --steps clustering pairpackets relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output`
+- `python main.py --steps clustering pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir algo_output`
+- `python main.py --steps clustering pairpackets relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir algo_output`
+- `python main.py --steps relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output_llama3b`
+- `python main.py --steps relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir sql_output_llama8b`
+- `python main.py --steps relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output`
+- `python main.py --steps relations --llm-model Qwen/Qwen2.5-14B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output_qwen14b`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output_llama8b/`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.1-8B-Instruct --concurrency 1 --batch-size 32 --out-dir algo_output_llama8b/`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir anlp_output_llama3b/`
+- `python main.py --steps pairpackets relations --llm-model meta-llama/Llama-3.2-3B-Instruct --concurrency 1 --batch-size 32 --out-dir algo_output_llama3b/`
+- `python eval.py --input_file "/home/alrabah2/graphika/graphika/evaluation/relations_algo_llama8b (1).jsonl" --course_name algo`

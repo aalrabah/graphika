@@ -31,7 +31,7 @@ python relation_judger.py --in out/sql/pairpackets.jsonl --out out/sql/relations
 python clustering.py --chunks out/chunks.jsonl --mentions out/mentions.jsonl --out out/context_clusters.jsonl --use-umap
 ```
 
-There is no automated test suite and no lint/format config in this repo. `testing_cmds.txt` is a running log of ad hoc pipeline invocations across datasets/models used to manually verify behavior — check it for known-working command shapes before inventing new ones. `evaluation/eval.py` is a separate vLLM-based scorer for judging output quality against `evaluation/final_eval.json`.
+There is no automated test suite and no lint/format config in this repo. `testing_cmds.md` is the canonical log of pipeline invocations, organized by course then model, with per-stage output counts (chunks/mentions/concepts/clusters/pairs/relations) including `(kept)` values after the `min_unique_chunks` filter — check it for known-working command shapes and expected output scale before inventing new ones. `testing_cmds.txt` is now just a scratch pad for quick manual notes jotted mid-run; fold anything worth keeping into `testing_cmds.md`. `evaluation/eval.py` is a separate vLLM-based scorer for judging output quality against `evaluation/final_eval.json`.
 
 ## Architecture
 
