@@ -11,6 +11,11 @@ Append-only log of investigation findings, diagnostics, and root causes across t
 ```
 
 ---
+## Copy Outputs to Google
+
+rclone copy out/ "gdrive,root_folder_id=1fYx3ElbdwjGPvxe8b1BTzJ01j20nP-iL:"
+
+---
 
 ## [2026-07-04] ME200 vs ME400 chunking discrepancy
 
@@ -730,3 +735,345 @@ Clustering and pairpackets both read `mentions_path` (the on-disk, filtered file
 ### Status — logged, not fixed
 
 **Decision:** log now, fix later, to keep momentum on bringing in remaining course content first. Candidate fix (not yet implemented): rebuild/rewrite `concept_cards.jsonl` from the filtered `mentions.jsonl` immediately after the `min_unique_chunks` filter runs in `main.py`'s llm step (~line 436), or emit a separate `concept_cards_filtered.jsonl` and point the notebooks at that instead. Affects every existing course's `concept_cards.jsonl` (me200, me400, me320, sql, tam251) — a fix should include regenerating those, not just changing behavior for future runs, if the notebooks are to be trusted.
+
+---
+
+## [2026-08-14] evaluation/eval.py run against a local course for the first time (cs401) — two blockers fixed, course_map extended, first baseline scores recorded
+
+`evaluation/eval.py` had only ever been run by the predecessor against their own
+`relations_algo_llama8b.jsonl` (see testing_cmds.md). Pointing it at `out/cs401/relations.jsonl`
+surfaced three things that were hardcoded to that original three-course experiment.
+
+### Blocker 1 — `json_repair` imported but not declared
+
+`eval.py:9` imports `json_repair`; it is absent from `requirements.txt`. Fresh environments
+fail at import with `ModuleNotFoundError` before argument parsing. Installed manually; the
+requirements entry is still missing.
+
+### Blocker 2 — `max_model_len` hardcoded above the model's real ceiling
+
+`eval.py` passed `max_model_len=131072`, sized for the `openai/gpt-oss-120b` default. Qwen2.5-14B-Instruct
+derives 32768 (`max_position_embeddings=32768`, no rope_scaling), so vLLM refused to build the
+engine: pydantic `ValidationError ... User-specified max_model_len (131072) is greater than the
+derived max_model_len`. This fires during config validation, before any weights load — GPU memory
+never moves off 0 MiB.
+
+vLLM's suggested `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` was deliberately NOT used: Qwen2.5 is RoPE, and
+positions past the derived length produce `nan`, which would mean a scorer that appears to run and
+silently returns garbage.
+
+Fix: `--max_model_len` CLI arg defaulting to `None`, so vLLM reads the ceiling from each model's own
+config (32768 here, 131072 for gpt-oss-120b) with no per-model edits.
+
+Note this is the opposite case from the pipeline's `VLLM_MAX_MODEL_LEN=16384` (`relation_judger.py:41`,
+2026-07-08 entry), which deliberately *lowers* the ceiling below 32768 to buy KV-cache concurrency
+across thousands of calls. eval runs a few hundred prompts once, so that tradeoff does not apply.
+Measured cs401 worst case: ~6.9K chars (~2,000 tokens) of excerpts + ~700 tokens of template — far
+under any ceiling.
+
+### Course map hardcoded to the paper's three courses
+
+`eval.py`'s `course_map` held only `algo`/`anlp`/`sql`. The value is not a label — it is injected into
+both judge prompts as `Course Title:` (`prompts.py:164`, `prompts.py:211`), and node significance is
+judged course-relative ("is this concept significant for this course?"). Scoring cs401 under algo's
+"Efficient Algorithms and Intractable Problems" would under-credit its combinatorics content.
+
+Added `cs401`, `cs403`, `cs401_403`, each carrying a condensed scope string (counting/combinatorics,
+proofs, recurrences, asymptotics, data structures, graph traversal, DP/greedy/divide-and-conquer,
+automata, P vs NP) rather than a bare title.
+
+**Comparability caveat:** the three original courses still get bare five-word titles, so cs401's
+node-significance scores are systematically more generous than algo/anlp/sql — the judge can match a
+borderline concept against a topic list the others never had. The first logged rationale does exactly
+this ("a fundamental topic in discrete mathematics and algorithms courses"). cs401 numbers are not
+directly comparable to the paper's three until either the prompt gains a separate `Course Scope:`
+field or the other three get equivalent scope strings.
+
+### Baseline scores — cs401, Qwen2.5-14B-Instruct judge
+
+| Metric | Mean | Std | n |
+|---|---|---|---|
+| node_significance | 0.943 | 0.159 | 35 nodes |
+| triplet_accuracy | 0.679 | 0.263 | 126 triplets |
+
+Raw 0–2 scores normalized by ÷2 (`eval.py:133`). Composition of the 126 records: 54 `depends_on`,
+2 `part_of`, 70 `None`.
+
+Two scoping facts needed to read these. Node significance skips `relation: null` records
+(`eval.py:103`), so it scored only the 35 concepts that survived into an edge — it measures the graph's
+concepts, not extraction quality, and cannot see concepts that never formed an edge. Triplet accuracy
+includes all 126 records; the rubric lists `None` as a valid relation type (`prompts.py:96-98`), so
+the 70 no-edge records earn credit for correctly declining, and the headline 0.679 blends that with
+genuine edge judgments. The split between the two is not recoverable — only mean/std survive, not
+per-item scores.
+
+The lowest-scoring sample logged (`BINARY_SEARCH depends_on SEARCH_STEPS`, score 1, "direction is
+unclear") points at extraction rather than judging: `SEARCH_STEPS` is slide phrasing, not a course
+concept. Only 2 `part_of` edges out of 56 real edges also makes the relation vocabulary effectively
+single-valued on this course.
+
+Sample is thin (126 records, 35 nodes) — treat as a smoke test, not a baseline to compare against.
+
+### Not fixed
+
+- `course_map` is duplicated as an `if/elif` chain in batch mode (`eval.py:354`) plus a hardcoded
+  three-course `results` dict (`eval.py:316`), so batch mode still skips cs401 with "Unknown course
+  code". Option strings at `eval.py:255` / `eval.py:281` are stale for the same reason.
+- Single-file mode ignores `--output_json` (used only at `eval.py:317`/`eval.py:410`) and prints to
+  stdout, so results survive only in the redirected log.
+- No per-item scores persisted, so triplet accuracy cannot be split by null vs non-null.
+
+---
+
+## [2026-08-14] cs401_403 full run — scores unchanged at 3x corpus size, and `part_of` is effectively dead output (2 edges out of 93, twice in a row)
+
+First full pipeline run on the combined 379-page `cs401_403_Combined_text.pdf` (72 MB, no
+forced OCR — filename lacks the `_scan` tag), followed immediately by `evaluation/eval.py`.
+Clean end to end: pipeline 05:06:26 → 05:53:15 (~47 min), eval → 05:59:45 (~6.5 min).
+
+279 chunks, 950 mentions (kept 323), 605 concepts (kept 71), 74 clusters, 180 pairs,
+180 relations. `VLLM_MAX_MODEL_LEN=16384` was set for the entire run rather than just the
+relations step, as insurance against the 2026-07-07 token-overflow class on an unattended
+overnight run; no overflow occurred, so it remains untested whether the `llm` step would
+have hit it at 8192 on this corpus.
+
+### Scores are flat across a 3x corpus increase
+
+| Metric | cs401 (126 records) | cs401_403 (180 records) |
+|---|---|---|
+| node_significance | 0.943 ± 0.159 (35 nodes) | 0.951 ± 0.149 (61 nodes) |
+| triplet_accuracy | 0.679 ± 0.263 | 0.683 ± 0.278 |
+
+Both deltas are far inside one standard deviation. Whatever caps triplet accuracy near 0.68
+is structural, not a small-sample artifact — worth noting before spending more GPU hours on
+larger corpora expecting the number to move.
+
+### `part_of` is not being produced
+
+| Course | depends_on | part_of | None | Real edges |
+|---|---|---|---|---|
+| cs401 | 54 | 2 | 70 | 56 |
+| cs401_403 | 91 | 2 | 87 | 93 |
+
+Exactly 2 `part_of` edges on both runs, despite `ALLOWED_RELATIONS` carrying it as one of two
+output types and despite the material (discrete math → data structures → algorithm paradigms)
+being explicitly hierarchical. A 2/93 rate makes the relation vocabulary effectively
+single-valued, which also means `triplet_accuracy` is close to a pure `depends_on`
+direction-accuracy score.
+
+Not yet investigated: whether the cause is `relation_judger.py`'s prompt (a `depends_on`-first
+framing, or rubric wording that makes `part_of` hard to select), `pairpackets`' evidence
+aggregation not surfacing containment relationships, or the courses genuinely lacking them.
+Checking a non-algorithms course (an ME or TAM run) for its `part_of` rate would separate
+"prompt problem" from "these two courses" cheaply, since those runs already exist.
+
+Also of note: 87/180 records (48%) were judged `None`. Combined with the flat scores above,
+roughly half of what `pairpackets` proposes is being rejected downstream — the pairing stage's
+precision, not the judge's, may be the lever worth pulling.
+
+### `concept_cards.jsonl` still stale
+
+605 cards against 71 concepts surviving `min_unique_chunks=3` — **88.3% orphaned**, squarely in
+the 76-93% band documented for every prior course. The 2026-07-13 entry's candidate fix remains
+unimplemented, and `students_mapping.ipynb` consumes this file directly.
+
+---
+
+## [2026-08-14] cs401_403 concept graph rendered; undeclared deps and `out/` ignore rule fixed
+
+`knowledge_graph_visualization.ipynb` against `out/cs401_403/relations.jsonl` → 93 edges,
+61 nodes, 0 isolated → `out/cs401_403/kg_visualization.html`. Run headless via
+`jupyter nbconvert --execute` so the tracked notebook keeps no outputs.
+
+Node sample reads as expected for a 0.68 triplet score: real concepts (`BIJECTION`,
+`ASYMPTOTIC_ANALYSIS`, `DIVIDE_AND_CONQUER`) mixed with slide phrasings (`SEARCH_STEPS`,
+`CHOOSE_ITEMS`).
+
+`json_repair` and `neo4j-viz` were imported but undeclared; both added to `requirements.txt`.
+`neo4j-viz` needs `pip install --user` — a plain install hits `Permission denied` on
+`/opt/conda/etc/jupyter/nbconfig`.
+
+`.gitignore` was extension-based, so `out/` was only covered by accident until the first
+non-jsonl artifact appeared. Added `out/` explicitly; outputs go to Drive, not git.
+
+Next: remaining course material on this same configuration.
+
+---
+
+## [2026-08-14] me200 ffp vs ffp+enriched scored with eval.py — enrichment costs ~0.03 triplet accuracy, and richer course context lowers node significance rather than inflating it
+
+First `eval.py` run on a `_scan` course. 2×2 over the two me200 Qwen14B variants and two
+`course_name` strings: a bare `"Thermodynamics"` matching the paper's three courses, and the
+official ME 200 catalog description with the prerequisite/credit-hours line dropped. Judge
+Qwen2.5-14B-Instruct, single-file mode, ~6 min per cell on the A100, no JSON parse failures.
+
+| Variant | Course string | node_significance | triplet_accuracy |
+|---|---|---|---|
+| ffp | bare title | 0.9845 ± 0.087 | 0.6137 ± 0.228 |
+| ffp | catalog | 0.9612 ± 0.134 | 0.6146 ± 0.220 |
+| ffp+enriched | bare title | 0.9857 ± 0.083 | 0.5827 ± 0.203 |
+| ffp+enriched | catalog | 0.9821 ± 0.093 | 0.5841 ± 0.203 |
+
+n = 129 nodes / 1711 triplets for ffp, 140 / 2195 for ffp+enriched.
+
+Triplet accuracy is invariant to the course string (±0.001 in both variants), and the enrichment
+penalty replicates across conditions: −0.031 bare, −0.030 catalog.
+
+That penalty is understated. Enrichment raises the null share from 39.6% to 48.9%, and the rubric
+counts `None` as a valid relation type, so a null-heavy file collects easy credit — the mix shift
+should have pushed enriched up. It fell anyway, so the per-bucket drop exceeds −0.03. Size
+unmeasured: only mean/std are persisted.
+
+Node significance is flat between variants (+0.001 bare, −0.004 catalog), placing the cost at the
+edge level rather than the concept level, consistent with Finding 5 of the 2026-07-08 me200 entry.
+
+Course-string detail moves node significance *down* (−0.023 ffp, −0.004 enriched), reversing the
+direction assumed in the cs401 entry. A bare "Thermodynamics" admits anything thermo-adjacent; an
+explicit topic list gives the judge grounds to decline. Whether ffp genuinely drops more than
+enriched is unresolved at this n.
+
+Two of the seven catalog topics have zero representation among the 140 edge concepts —
+availability/exergy, and ideal gas mixtures (`TWO_PHASE_MIXTURE` is saturation, not a gas mixture);
+state postulate is also absent. Catalog text was kept verbatim rather than trimmed to match the
+corpus, since trimming the yardstick to the output is circular. Whether the scanned notes omit
+those lectures or extraction dropped them is unchecked.
+
+This revises the 2026-07-08 me200 bottom line: enrichment on scanned material is not merely
+lower-yield, it lowers mean edge quality measurably. Node quality and pair-level stability still
+show no harm, so the cost is precision, not corruption.
+
+`eval.py` gained `me200` and `me200_catalog` course_map keys. `json_repair` is declared in
+`requirements.txt` but was missing from the `/opt/conda` env again — reinstalled.
+
+Next: split each relations file into null and non-null subsets and rescore, to size the real
+per-bucket enrichment penalty.
+
+---
+
+## [2026-08-14] me400 Qwen14B default/ffp/enriched scored in both prompt conditions — the enrichment penalty is specific to scanned material, ffp is a no-op on typed, and node_significance is saturated
+
+2×3 over the three surviving me400 Qwen14B variants and the same two `course_name` conditions used
+for me200, the second being the official ME 400 catalog description. `6000_chunks` and `buggy_run`
+excluded as superseded. All three `relations.jsonl` line counts match their `run.log` write counts
+(3158 / 3168 / 3472); no JSON parse failures in any cell.
+
+| Variant | Course string | node_significance | triplet_accuracy |
+|---|---|---|---|
+| default | bare title | 0.9940 ± 0.055 | 0.6811 ± 0.257 |
+| default | catalog | 0.9920 ± 0.063 | 0.6884 ± 0.254 |
+| ffp | bare title | 0.9920 ± 0.063 | 0.6761 ± 0.255 |
+| ffp | catalog | 0.9920 ± 0.063 | 0.6853 ± 0.248 |
+| enriched | bare title | 0.9870 ± 0.079 | 0.6753 ± 0.261 |
+| enriched | catalog | 0.9833 ± 0.090 | 0.6822 ± 0.259 |
+
+n = 249 / 251 / 270 nodes and 3158 / 3168 / 3472 triplets.
+
+The enrichment penalty does not reproduce here: −0.006 bare, −0.006 catalog, against me200's
+−0.031 / −0.030. The null-share confound also runs the opposite way — enrichment *lowers* me400's
+null share (40.8% → 32.9%) while it *raised* me200's (39.6% → 48.9%), so me400's enriched cell held
+flat while losing easy-credit nulls, whereas me200's fell while gaining them. Per-bucket quality is
+therefore flat-to-up on typed material and down on handwritten. This confirms the mechanism
+proposed in the 2026-07-08 me200 entry: the cost tracks source legibility, not enrichment itself.
+
+ffp against default on typed material is −0.005 bare / −0.003 catalog with identical node
+significance — the first direct quality test of the 2026-07-05 verdict that `force_full_page_ocr`
+is not earning its keep on `_text` courses. Confirmed: slightly negative, never positive.
+
+The catalog string raises triplet accuracy on all three me400 variants (+0.007 to +0.009) against
++0.001 on me200. Small but consistent in direction, so me200's apparent prompt-invariance was too
+strong a reading; the effect remains an order of magnitude below the between-variant differences
+the comparison targets.
+
+`node_significance` is saturated and should not carry weight. Six me400 cells span 0.983–0.994,
+four me200 cells 0.961–0.986, cs401 0.943 — roughly 0.05 across every course and condition
+measured, most of it between courses rather than within. `triplet_accuracy` spans 0.58–0.69 over
+the same set and responds to real configuration changes.
+
+Note the two courses' "enriched" variants differ in OCR base: me400's is default-OCR + enrichment,
+me200's is ffp + enrichment. The cross-course claim is enrichment-on-typed vs enrichment-on-scanned,
+not a matched pair.
+
+`eval.py` gained `me400` and `me400_catalog` course_map keys.
+
+Next: the null/non-null split remains unmeasured on both courses.
+
+---
+
+## [2026-08-15] `part_of` rate surveyed across all existing relations files — not a prompt defect, and judge model scale dominates
+
+The 2026-08-14 cs401_403 entry left open whether 2 `part_of` edges out of 93 pointed at
+`relation_judger.py`'s prompt, at `pairpackets`' evidence aggregation, or at the courses
+themselves. Counting the `relation` field across every `relations.jsonl` on disk settles it,
+using runs that already existed.
+
+### Model scale
+
+Same course, same OCR setting, judge varied:
+
+| Course / OCR | Judge | depends_on | part_of | Real edges | `part_of` share | Null share |
+|---|---|---|---|---|---|---|
+| me200 ffp | Qwen3B | 1130 | 1364 | 2494 | 54.7% | 19.8% |
+| me200 ffp | Qwen14B | 905 | 128 | 1033 | 12.4% | 39.6% |
+| me200 ffp | Qwen32B | 2172 | 294 | 2466 | 11.9% | 28.9% |
+| me400 default | Qwen3B | 1830 | 1957 | 3787 | 51.7% | 20.7% |
+| me400 default | Qwen14B | 1608 | 260 | 1868 | 13.9% | 40.8% |
+| me400 default | Qwen32B | 3177 | 428 | 3605 | 11.9% | 29.4% |
+
+The 3B judge emits `part_of` at roughly 4× the 14B/32B rate while rejecting far fewer pairs —
+null share ~20% against 29-41%. The 14B and 32B judges agree to within 2 points on both courses.
+The cliff sits between 3B and 14B; there is none between 14B and 32B.
+
+Read the 3B rate as under-discrimination rather than recall: it says yes more often overall and
+reaches for `part_of` when it does. Retroactive support for standardizing on 14B, and a caution
+that any `part_of` statistic is comparable only within a judge tier.
+
+### Course variation
+
+Holding the judge at Qwen2.5-14B-Instruct:
+
+| Course | depends_on | part_of | Real edges | `part_of` share | Null share |
+|---|---|---|---|---|---|
+| me270 | 145 | 106 | 251 | 42.2% | 69.4% |
+| me400 ffp | 1693 | 238 | 1931 | 12.3% | 39.0% |
+| me200 ffp | 905 | 128 | 1033 | 12.4% | 39.6% |
+| me400 enriched | 2065 | 263 | 2328 | 11.3% | 32.9% |
+| tam251 enriched | 59 | 7 | 66 | 10.6% | 30.5% |
+| me310 | 506 | 56 | 562 | 10.0% | 39.4% |
+| me200 ffp+enriched | 1029 | 93 | 1122 | 8.3% | 48.9% |
+| me320 ffp+enriched | 629 | 48 | 677 | 7.1% | 47.7% |
+| me340 | 458 | 27 | 485 | 5.6% | 26.1% |
+| cs401 | 54 | 2 | 56 | 3.6% | 55.6% |
+| cs401_403 | 91 | 2 | 93 | 2.2% | 48.3% |
+
+### Conclusions
+
+**Prompt and pairpackets ruled out.** The same `relation_judger.py` prompt and the same
+`pairpackets` evidence aggregation produce 42.2% `part_of` on me270 and 2.2% on cs401_403.
+Nothing structural suppresses the label.
+
+**Not a discipline story either.** ME courses alone span 5.6% to 42.2% under one judge — a wider
+range than the gap between the ME median and the CS courses. Course-level variation is real but
+does not reduce to subject area.
+
+**me270 is the outlier to understand.** 3× the `part_of` rate of any other 14B run, and the
+highest null share on record at 69.4%: it both rejects the most pairs and labels the survivors
+`part_of` most often. Both numbers should be explained before me270 enters any cross-course
+comparison.
+
+**Revises the 2026-08-14 cs401_403 entry.** `part_of` is "effectively dead output" on the iCAN
+corpus specifically, not in the pipeline. It follows that `triplet_accuracy` approximates a pure
+`depends_on` direction-accuracy score on cs401/cs401_403, while on the ME runs it blends two live
+relation types — the two are not directly comparable.
+
+### Notebook output path
+
+`knowledge_graph_visualization.ipynb` now reads `KG_RELATIONS` and derives its HTML path from that
+file's directory, replacing a hardcoded `JSONL_PATH` and a write to the process CWD. Verified by
+re-rendering cs401_403 headless: same 93 edges, no outputs added to the tracked notebook.
+
+Single-record `relations.jsonl` files under `out/me200/Qwen14B/`, `out/sql/Qwen14B/`, and
+`out/sql/Qwen32B/` are aborted-run stubs, not results.
+
+Next: the null/non-null split, still unmeasured. Persisting per-item scores in `eval.py` makes it
+fall out of every future run rather than requiring a rescore — worth doing before the remaining
+courses are evaluated.

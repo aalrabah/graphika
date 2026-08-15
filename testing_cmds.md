@@ -121,6 +121,25 @@ and not others.
 | force_full_page_ocr (ffp) | 442 | 1760 / 882 | 890 / 130 | 121 | 1711 | 1711 |
 | ffp + enriched (`VLLM_MAX_MODEL_LEN=16384`) | 443 | 1833 / 1004 | 867 / 142 | 120 | 2195 | 2195 |
 
+#### Evaluation — Qwen2.5-14B-Instruct as judge, 2×2 over variant × course string
+`python evaluation/eval.py --input_file out/me200/Qwen14B_ffp/relations.jsonl --course_name me200 --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b > out/me200/Qwen14B_ffp/eval_me200_qwen14b_ffp_baretitle.log 2>&1`
+
+Swap `--course_name me200_catalog` for the catalog condition and
+`Qwen14B_ffp_enriched` for the enriched variant; one log per cell, named
+`eval_me200_qwen14b_<variant>_<baretitle|catalog>.log` in the variant's dir.
+
+| Variant | Course string | Nodes | Triplets | node_significance | triplet_accuracy |
+|---|---|---|---|---|---|
+| ffp | bare title | 129 | 1711 | 0.9845 ± 0.087 | 0.6137 ± 0.228 |
+| ffp | catalog | 129 | 1711 | 0.9612 ± 0.134 | 0.6146 ± 0.220 |
+| ffp + enriched | bare title | 140 | 2195 | 0.9857 ± 0.083 | 0.5827 ± 0.203 |
+| ffp + enriched | catalog | 140 | 2195 | 0.9821 ± 0.093 | 0.5841 ± 0.203 |
+
+~6 min per cell on the A100; no JSON parse failures. Relation mix: ffp 905
+`depends_on` / 128 `part_of` / 678 `None`, enriched 1029 / 93 / 1073 — null
+share 39.6% → 48.9%. Single-file mode ignores `--output_json`; the logs are the
+only record. Analysis in findings.md 2026-08-14.
+
 ### Qwen2.5-32B-Instruct (H200)
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me200 --out-dir out/me200 --llm-model Qwen/Qwen2.5-32B-Instruct > out/me200/run.log 2>&1 &`
 
@@ -159,6 +178,29 @@ A superseded "buggy_run" attempt for the enriched config also survives on
 disk (2997/1138/172/3123) — not used here since the final run in the parent
 dir replaced it.
 
+The enriched outputs sit one level deeper than the other two variants:
+`out/me400/Qwen14B_enriched/8191_chunks/`. A sibling `6000_chunks/` (120
+relations) is a superseded chunk-budget attempt.
+
+#### Evaluation — Qwen2.5-14B-Instruct as judge, 2×3 over variant × course string
+`python evaluation/eval.py --input_file out/me400/Qwen14B/relations.jsonl --course_name me400 --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b > out/me400/Qwen14B/eval_me400_qwen14b_default_baretitle.log 2>&1`
+
+Swap `--course_name me400_catalog` for the catalog condition; variants are
+`Qwen14B` (default), `Qwen14B_ffp`, and `Qwen14B_enriched/8191_chunks`.
+
+| Variant | Course string | Nodes | Triplets | node_significance | triplet_accuracy |
+|---|---|---|---|---|---|
+| default | bare title | 249 | 3158 | 0.9940 ± 0.055 | 0.6811 ± 0.257 |
+| default | catalog | 249 | 3158 | 0.9920 ± 0.063 | 0.6884 ± 0.254 |
+| ffp | bare title | 251 | 3168 | 0.9920 ± 0.063 | 0.6761 ± 0.255 |
+| ffp | catalog | 251 | 3168 | 0.9920 ± 0.063 | 0.6853 ± 0.248 |
+| enriched | bare title | 270 | 3472 | 0.9870 ± 0.079 | 0.6753 ± 0.261 |
+| enriched | catalog | 270 | 3472 | 0.9833 ± 0.090 | 0.6822 ± 0.259 |
+
+`6000_chunks` and `buggy_run` excluded as superseded. No JSON parse failures.
+Null share 40.8% (default) → 39.0% (ffp) → 32.9% (enriched). Analysis in
+findings.md 2026-08-14.
+
 ### Qwen2.5-32B-Instruct (H200)
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me400 --out-dir out/me400 --llm-model Qwen/Qwen2.5-32B-Instruct > out/me400/run.log 2>&1 &`
 
@@ -196,16 +238,14 @@ Fully verified against `run.log` — no discrepancies.
 
 Fully verified against `run.log` — no discrepancies.
 
-## me340 — Qwen2.5-14B-Instruct (H200) — **run in progress**
+## me340 — Qwen2.5-14B-Instruct (H200)
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me340 --out-dir out/me340 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me340/run.log 2>&1 &`
 
 | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
 |---|---|---|---|---|---|
-| 306 | — | — | — | — | — |
+| 306 | 1294 / 707 | 603 / 90 | 79 | 656 | 656 |
 
-Started 2026-07-10 23:43 UTC (PID 1572, still running as of this writing);
-the log only shows the model finishing weight-loading, so downstream counts
-genuinely don't exist yet. Re-run the backfill once it completes.
+458 `depends_on`, 27 `part_of`, 171 `None` — 485 real edges.
 
 ## tam251 — Qwen2.5-14B-Instruct (H200), enriched
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/tam251 --out-dir out/tam251 --llm-model Qwen/Qwen2.5-14B-Instruct > out/tam251/run.log 2>&1 &`
@@ -216,6 +256,77 @@ genuinely don't exist yet. Re-run the backfill once it completes.
 
 Fully verified against `run.log` (`out/tam251/Qwen14B_enriched/run.log`) — no
 discrepancies.
+
+---
+
+## cs401_403 — Qwen2.5-14B-Instruct (A100-80GB), combined 379-page text PDF
+`nohup bash -c 'set -e; LLM_PROVIDER=vllm VLLM_MAX_MODEL_LEN=16384 PYTHONUNBUFFERED=1 python main.py --data-dir data/cs401_403 --out-dir out/cs401_403 --llm-model Qwen/Qwen2.5-14B-Instruct; test -s out/cs401_403/relations.jsonl; PYTHONUNBUFFERED=1 python evaluation/eval.py --input_file out/cs401_403/relations.jsonl --course_name cs401_403 --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b' > out/cs401_403/overnight.log 2>&1 &`
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 279 | 950 / 323 | 605 / 71 | 74 | 180 | 180 |
+
+Pipeline 05:06:26 → 05:53:15 (~47 min), eval → 05:59:45 (~6.5 min). Relations
+break down as 91 `depends_on`, 2 `part_of`, 87 `None` — 93 real edges over 61
+nodes. `VLLM_MAX_MODEL_LEN=16384` was set for the whole run (not just relations)
+as overflow insurance on an unattended run; no overflow occurred.
+
+Eval, same judge model: node_significance 0.951 ± 0.149 (61 nodes),
+triplet_accuracy 0.683 ± 0.278 (180 triplets) — within noise of cs401's 0.943 /
+0.679 at a third the corpus size. See findings.md 2026-08-14.
+
+Graph rendered via `knowledge_graph_visualization.ipynb` (93 edges, 61 nodes, 0
+isolated) → `out/cs401_403/kg_visualization.html`.
+
+---
+
+## cs401 — evaluation run (Qwen2.5-14B-Instruct as judge, A100-80GB)
+`nohup python evaluation/eval.py --input_file out/cs401/relations.jsonl --course_name cs401 --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b > out/cs401/eval_cs401_qwen14b.log 2>&1 &`
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 126 | 54 | 2 | 70 | 35 | 0.943 ± 0.159 | 0.679 ± 0.263 |
+
+Scores are raw 0–2 normalized by ÷2. Node significance covers only the 35
+concepts appearing in non-null edges (`eval.py:103` skips `relation: null`);
+triplet accuracy covers all 126 records, including the 70 nulls, which the
+rubric scores as a valid "None" judgment. Judging took ~38s for 161 prompts;
+model load dominated (~5 min).
+
+Needs the `--course_name cs401` map entry and the `--max_model_len` fix — see
+findings.md 2026-08-14. Single-file mode prints results to stdout only, so the
+log is the sole record.
+
+---
+
+## Graph rendering (any course)
+
+`knowledge_graph_visualization.ipynb` reads `KG_RELATIONS` and writes
+`kg_visualization.html` beside that file.
+
+`KG_RELATIONS=out/<course>/relations.jsonl jupyter nbconvert --to notebook --execute --stdout knowledge_graph_visualization.ipynb > /dev/null`
+
+~15s, no GPU. `--stdout` keeps the tracked notebook free of outputs. All
+courses already run:
+
+`for f in out/*/relations.jsonl; do KG_RELATIONS=$f jupyter nbconvert --to notebook --execute --stdout knowledge_graph_visualization.ipynb > /dev/null && echo "ok $f"; done`
+
+### Combined pipeline → graph → eval
+
+```bash
+C=me320
+nohup bash -c "set -e
+LLM_PROVIDER=vllm VLLM_MAX_MODEL_LEN=16384 PYTHONUNBUFFERED=1 python main.py \
+  --data-dir data/$C --out-dir out/$C --llm-model Qwen/Qwen2.5-14B-Instruct
+test -s out/$C/relations.jsonl
+KG_RELATIONS=out/$C/relations.jsonl jupyter nbconvert --to notebook --execute \
+  --stdout knowledge_graph_visualization.ipynb > /dev/null
+PYTHONUNBUFFERED=1 python evaluation/eval.py --input_file out/$C/relations.jsonl \
+  --course_name $C --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b" \
+  > out/$C/overnight.log 2>&1 &
+```
+
+Requires a `course_map` entry in `evaluation/eval.py` for `$C`.
 
 ---
 
