@@ -288,10 +288,46 @@ def main():
             print("   Options: 'algo', 'anlp', 'sql'")
             return
 
+        ican_scope = (
+            "an accelerated discrete mathematics and algorithms sequence for graduate "
+            "students entering computer science from non-CS backgrounds, covering "
+            "counting and combinatorics, proofs and propositional logic, recursion and "
+            "solving recurrences, asymptotic analysis, core data structures, graph "
+            "traversals and shortest paths, divide-and-conquer, greedy algorithms, "
+            "dynamic programming, finite automata and Turing machines, and P vs NP with "
+            "polynomial-time reductions and NP-completeness"
+        )
+        # [JR] official ME 200 catalog text, prereq/credit-hours line dropped
+        me200_catalog_scope = (
+            "introduction to classical thermodynamics through the second law; system "
+            "and control volume analyses of thermodynamic processes; irreversibility "
+            "and availability; relations for ideal gas mixtures. Topics: definitions, "
+            "properties, equations of state, state postulate, compressibility charts; "
+            "work, heat transfer, and the first law of thermodynamics for a control "
+            "mass (closed system); the first law for a control volume (open system), "
+            "steady state and unsteady analysis; entropy, the second law of "
+            "thermodynamics, component efficiency, cycle efficiency (power and "
+            "refrigeration cycles); reversible work, availability, irreversibility; "
+            "properties and thermodynamics of ideal gas mixtures"
+        )
+        me400_catalog_scope = (
+            "processes and systems for energy conversion, including power and "
+            "refrigeration cycles, air conditioning, thermoelectrics, and fuel cells; "
+            "ideal gas mixtures and psychrometrics. Topics: introduction and review of "
+            "thermodynamics; chemical reactions; power cycles; refrigeration cycles; "
+            "air-conditioning; direct energy conversion"
+        )
         course_map = {
             "algo": "Efficient Algorithms and Intractable Problems",
             "anlp": "Advanced Topics in Natural Language Processing",
             "sql": "Database Systems",
+            "me200": "Thermodynamics",
+            "me200_catalog": f"Thermodynamics (ME 200) — {me200_catalog_scope}",
+            "me400": "Energy Conversion Systems",
+            "me400_catalog": f"Energy Conversion Systems (ME 400) — {me400_catalog_scope}",
+            "cs401": f"iCAN Algorithms (CS 401) — {ican_scope}",
+            "cs403": f"iCAN Algorithms (CS 403) — {ican_scope}",
+            "cs401_403": f"iCAN Algorithms (CS 401/403) — {ican_scope}",
         }
         if args.course_name not in course_map:
             print(f"✗ Error: Invalid course name '{args.course_name}'")
