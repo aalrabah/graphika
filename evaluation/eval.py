@@ -261,12 +261,19 @@ def main():
     )
     parser.add_argument("--output_json", default="final_eval_complete.json")
     parser.add_argument("--model_name", default="openai/gpt-oss-120b")
+    # [JR] Was hardcoded to 131072, which fails on any shorter-context model.
+    parser.add_argument(
+        "--max_model_len",
+        type=int,
+        default=None,
+        help="vLLM context length. Default: read from the model's config.",
+    )
     args = parser.parse_args()
 
     print(f"Initializing vLLM with model: {args.model_name}")
     llm = LLM(
         model=args.model_name,
-        max_model_len=131072,
+        max_model_len=args.max_model_len,
         tensor_parallel_size=1,
         gpu_memory_utilization=0.9,
         max_num_seqs=400,
