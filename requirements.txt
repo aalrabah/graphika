@@ -24,3 +24,8 @@ hdbscan
 # updated to support CUDA 13, or re-verifying against whatever driver is present.
 vllm==0.19.1
 # --- end Claude + Jeffry Royce addition ---
+
+# [JR] Imported but previously undeclared: json_repair by evaluation/eval.py,
+# neo4j-viz by knowledge_graph_visualization.ipynb.
+json_repair
+neo4j-viz
