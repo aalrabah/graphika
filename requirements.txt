@@ -33,3 +33,6 @@ neo4j-viz
 anthropic
 numpy
 nbconvert
+
+# [JR] make_packet.py (instructor review packet .docx generator)
+python-docx

@@ -252,6 +252,47 @@ course exceeds it. Output size is roughly 6.5 MB of fixed library payload plus ~
 
 ---
 
+## Instructor review packet
+
+`make_packet.py` turns a `relations.jsonl` into a Word document an instructor can mark up:
+Part A (are these significant concepts?), Part B (are these relationships right?), and Part C
+(three short questions). Set the course once at the top:
+
+```bash
+C=cs401_403
+TITLE="iCAN Algorithms (CS 401/403)"
+M=qwen14b
+
+python make_packet.py \
+  --relations out/$C/relations.jsonl \
+  --course-title "$TITLE" \
+  --run-label "$C, Qwen-14B, August 2026" \
+  --eval-json out/$C/eval_${C}_${M}.json \
+  --out out/$C/InstructKG_Review_Packet_${C}.docx
+```
+
+The two LLM-judge scores are required.
+If no eval JSON, drop `--eval-json` and pass `--node-significance` and `--triplet-accuracy`
+from the tables in `testing_cmds.md`.
+
+Sampling is deterministic for a given `--seed`, so regenerating a packet reproduces the same
+questions. Change the seed to draw a fresh sample.
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--seed` | `597` | Controls Part A tail draws and Part B sampling |
+| `--head-concepts` | `12` | Most-referenced concepts in Part A |
+| `--tail-concepts` | `3` | Seeded tail draws added to Part A |
+| `--glance-concepts` | `8` | Concepts listed in the summary paragraph |
+| `--relationships` | `15` | Relationships sampled for Part B |
+| `--justification-chars` | `420` | Truncation cap on each justification |
+| `--name-overrides` | `None` | JSON file mapping raw names to display names |
+| `--part-a-note` | `None` | Extra sentence in the Part A footnote |
+| `--sample` | off | Render the banner label in red |
+| `--return-by` / `--return-email` | `[date]` / `[email]` | Fill the return lines |
+
+---
+
 ## Configuration
 
 ### Command-Line Arguments
@@ -306,6 +347,7 @@ InstructKG/
 ├── prompts.py                         # Prompt templates for every LLM stage
 ├── response_parsing.py                # Tolerant JSON → Pydantic parsing
 ├── config.py                          # Configuration defaults (.env)
+├── make_packet.py                     # relations.jsonl -> instructor review packet (.docx)
 ├── requirements.txt                   # Python dependencies
 ├── evaluation/
 │   ├── eval.py                        # LLM-judge scorer
@@ -320,7 +362,8 @@ InstructKG/
     ├── context_clusters.jsonl
     ├── pairpackets.jsonl
     ├── relations.jsonl                # Final knowledge graph
-    └── kg_visualization.html
+    ├── kg_visualization.html
+    └── InstructKG_Review_Packet_<course>.docx
 ```
 
 ---
