@@ -13,6 +13,13 @@
 
 ---
 
+> **Fork note.** This is a fork of [aalrabah/InstructKG](https://github.com/aalrabah/InstructKG),
+> extended for a study over UIUC course materials. The Overview and Architecture below are the
+> original author's. This fork adds local-model support via vLLM, an evaluation harness, graph
+> visualization, and the operational documentation needed to reproduce a run end to end.
+
+---
+
 ## Overview
 
 **InstructKG** is an automated framework that extracts structured knowledge graphs from educational materials. It analyzes lecture slides, textbooks, and course materials to identify concepts and their pedagogical relationships — helping students understand learning paths and prerequisite dependencies.
@@ -21,7 +28,7 @@
 
 Given educational PDFs, InstructKG:
 1. **Extracts concepts** mentioned across lectures using LLMs
-2. **Identifies roles** (definition, application, prerequisite) for each concept
+2. **Identifies roles** (Definition, Example, Assumption, NA) for each concept
 3. **Clusters contexts** to find where concepts appear together
 4. **Judges relationships** between concept pairs to build dependency graphs
 
@@ -42,10 +49,10 @@ PDFs → Chunking → Concept Extraction → Clustering → Pair Generation → 
 ```
 
 1. **Ingestion**: Converts PDFs to semantically meaningful chunks
-2. **LLM Extraction**: Identifies concepts and their roles (definition/application/prerequisite)
+2. **LLM Extraction**: Identifies concepts and classifies each mention's role
 3. **Clustering**: Groups similar contexts using UMAP + HDBSCAN
 4. **Pair Packets**: Aggregates evidence for concept pairs from co-occurrences
-5. **Relation Judgment**: LLM determines prerequisite/related/unrelated relationships
+5. **Relation Judgment**: LLM classifies each pair as `depends_on`, `part_of`, or no edge
 
 ---
 
@@ -54,54 +61,126 @@ PDFs → Chunking → Concept Extraction → Clustering → Pair Generation → 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/aalrabah/InstructKG.git
 cd InstructKG
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Basic Usage
-
-**Option 1: Run the full pipeline**
-
-```bash
-python main.py --data-dir ./lectures --out-dir ./output
-```
-
-**Option 2: Run specific steps**
+On shared or container environments where the Python prefix is not writable, install with
+`--user` so packages persist across sessions:
 
 ```bash
-# Only run concept extraction and relation judgment
-python main.py --data-dir ./lectures --steps llm relations
+pip install --user -r requirements.txt
 ```
 
-**Option 3: Customize models and parameters**
+`neo4j-viz` and `json_repair` in particular fail or silently disappear without this on
+`/opt/conda`-style installs.
+
+### Choosing an LLM backend
+
+`LLM_PROVIDER` selects the backend. It defaults to `openai`.
+
+| `LLM_PROVIDER` | Backend | Notes |
+|---|---|---|
+| `openai` (default) | OpenAI API | needs `OPENAI_API_KEY` |
+| `anthropic` / `claude` | Anthropic API | needs `ANTHROPIC_API_KEY` |
+| `vllm` | local vLLM engine | GPU; used for all local runs |
+| `hf` / `huggingface` / `local` | local vLLM engine | alias for `vllm` |
+| `hf_legacy` | transformers pipeline | slower fallback path |
+
+Local runs use `vllm`:
 
 ```bash
-python main.py \
-  --data-dir ./lectures \
-  --out-dir ./output \
-  --llm-model meta-llama/Llama-3.2-3B-Instruct \
-  --batch-size 16 \
-  --embedding-model all-MiniLM-L6-v2 \
-  --min-cluster-size 3
+LLM_PROVIDER=vllm python main.py \
+  --data-dir data/me400 --out-dir out/me400 \
+  --llm-model Qwen/Qwen2.5-14B-Instruct
 ```
+
+### Environment
+
+Configuration is read from a `.env` file in the repo root (see `config.py`).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LLM_PROVIDER` | `openai` | backend selection (table above) |
+| `OPENAI_API_KEY` | — | OpenAI credentials |
+| `ANTHROPIC_API_KEY` | — | Anthropic credentials |
+| `OUT_DIR` | `out` | default output directory |
+| `MAX_TOKENS` | `8191` | chunker token budget |
+| `CONCURRENCY` | `5` | request concurrency |
+| `VLLM_MAX_MODEL_LEN` | `8192` | vLLM context window |
+| `VLLM_MAX_NEW_TOKENS` | `512` | generation cap |
+| `VLLM_TEMPERATURE` | `0.1` | sampling temperature |
+| `VLLM_GPU_MEMORY_UTILIZATION` | `0.9` | vLLM memory fraction |
+
+Long-context stages can overflow at the default 8192. Set `VLLM_MAX_MODEL_LEN=16384` for
+relation judging on large corpora.
+
+### Input file naming — this controls OCR
+
+`ingest.py` picks its OCR mode from a tag in the PDF filename. This is the highest-impact
+operational detail in the repo:
+
+| Filename tag | OCR mode | Use for |
+|---|---|---|
+| `*_scan.pdf` | `force_full_page_ocr=True` | scanned or handwritten notes with no usable text layer |
+| `*_text.pdf` | native text extraction | PDFs with a clean embedded text layer |
+
+Getting this wrong is not subtle. The same scanned document produced 24 chunks with native
+extraction and 442 with full-page OCR.
+
+---
+
+## Running the full pipeline in one command
+
+Pipeline → graph → evaluation, detached, one course at a time:
+
+```bash
+C=me400
+mkdir -p out/$C
+nohup bash -c "set -e
+LLM_PROVIDER=vllm VLLM_MAX_MODEL_LEN=16384 PYTHONUNBUFFERED=1 python main.py \
+  --data-dir data/$C --out-dir out/$C --llm-model Qwen/Qwen2.5-14B-Instruct
+test -s out/$C/relations.jsonl
+KG_RELATIONS=out/$C/relations.jsonl jupyter nbconvert --to notebook --execute \
+  --stdout knowledge_graph_visualization.ipynb > /dev/null
+PYTHONUNBUFFERED=1 python evaluation/eval.py --input_file out/$C/relations.jsonl \
+  --course_name $C --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b \
+  > out/$C/eval_${C}_qwen14b.log 2>&1" > out/$C/run.log 2>&1 &
+```
+
+- Pipeline and graph output land in `out/<course>/run.log`; evaluation in
+  `out/<course>/eval_<course>_<model>.log`.
+- The graph step runs before evaluation deliberately — it is free, and under `set -e` an
+  evaluation error would otherwise cost you the graph too.
+- Evaluation requires a `course_map` entry for `$C` in `evaluation/eval.py`.
+
+### Running a subset of stages
+
+Stages read and write the same `--out-dir`, so partial reruns are normal:
+
+```bash
+python main.py --data-dir data/me400 --out-dir out/me400 \
+  --steps ingest llm clustering pairpackets relations
+```
+
+`main.py` skips `ingest` automatically when a `chunks*.jsonl` already exists in the out-dir.
+Delete it to force re-ingestion.
 
 ---
 
 ## Pipeline Stages
 
 ### 1. Ingestion (`ingest`)
-Converts PDF lectures into chunks with metadata.
+Converts PDF lectures into chunks with metadata, via docling + `HybridChunker`.
 
 **Output**: `chunks.jsonl`
 
 ### 2. Concept Extraction (`llm`)
-Uses LLMs to extract concepts and classify their roles.
-
-**Models supported**: GPT-4, Llama 3, Qwen 2.5, Mistral
+One call per chunk extracts candidate concepts; one call per (chunk, concept) classifies the
+mention's role as Definition, Example, Assumption or NA. Mentions are then aggregated per
+concept across all lectures.
 
 **Output**: `mentions.jsonl`, `concept_cards.jsonl`
 
@@ -113,14 +192,63 @@ Groups similar contexts where concepts appear.
 **Output**: `context_clusters.jsonl`
 
 ### 4. Pair Packet Generation (`pairpackets`)
-Aggregates evidence for concept pairs from chunk and cluster co-occurrences.
+Aggregates evidence for concept pairs that co-occur in the same chunk or the same cluster —
+temporal order, role-grounded snippets, co-occurrence counts.
 
 **Output**: `pairpackets.jsonl`
 
 ### 5. Relation Judgment (`relations`)
-LLM determines if concept pairs have prerequisite relationships.
+An LLM judges each pair packet, preferring chunk-level evidence over cluster-level evidence.
+The output vocabulary is `depends_on`, `part_of`, or no edge (`null`).
 
 **Output**: `relations.jsonl` (final knowledge graph edges)
+
+---
+
+## Evaluation
+
+`evaluation/eval.py` scores a `relations.jsonl` with an LLM judge on two metrics:
+**node significance** (is this concept meaningful for the course?) and **triplet accuracy**
+(is this relation judgment correct?). Both are ordinal 0–2, reported normalized to 0–1.
+
+```bash
+python evaluation/eval.py \
+  --input_file out/me400/relations.jsonl \
+  --course_name me400 \
+  --model_name Qwen/Qwen2.5-14B-Instruct \
+  --method_name instructkg_qwen14b
+```
+
+`--course_name` must be a key in the `course_map` inside `eval.py`. The mapped value is injected
+into the judge prompt as the course title and scope, and node significance is judged
+course-relative — so the string matters to the score, not just as a label.
+
+`--max_model_len` defaults to the model's own configured maximum. Judging is precision-oriented:
+it scores the edges the pipeline produced and has no recall term.
+
+---
+
+## Visualization
+
+`knowledge_graph_visualization.ipynb` renders a `relations.jsonl` to an interactive HTML graph.
+It is parameterized by environment variable, so it runs headless without editing:
+
+```bash
+KG_RELATIONS=out/me400/relations.jsonl \
+  jupyter nbconvert --to notebook --execute --stdout \
+  knowledge_graph_visualization.ipynb > /dev/null
+```
+
+`kg_visualization.html` is written beside the input file. `--stdout` discards the executed
+notebook so the tracked file never accumulates outputs.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KG_RELATIONS` | `out/cs401_403/relations.jsonl` | input relations file |
+| `KG_MAX_EDGES` | `500` | edge render ceiling |
+
+Above the ceiling the notebook samples rather than truncating, so raise `KG_MAX_EDGES` when a
+course exceeds it. Output size is roughly 6.5 MB of fixed library payload plus ~4 KB per edge.
 
 ---
 
@@ -130,33 +258,37 @@ LLM determines if concept pairs have prerequisite relationships.
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--data-dir` | `data/` | Folder containing PDF lectures |
-| `--out-dir` | `out/` | Output directory for results |
-| `--llm-model` | `gpt-4o-mini` | LLM model for extraction |
+| `--data-dir` | `data` | Folder containing PDF lectures |
+| `--out-dir` | `out` (`OUT_DIR`) | Output directory for results |
+| `--llm-model` | `OPENAI_CONCEPTS_MODEL` | LLM model for extraction |
 | `--batch-size` | `8` | Batch size for LLM calls |
+| `--concurrency` | `1` | Relation judger concurrency (keep at 1 for vLLM) |
 | `--embedding-model` | `all-MiniLM-L6-v2` | Model for embeddings |
 | `--min-cluster-size` | `2` | Minimum cluster size for HDBSCAN |
+| `--min-cooc-chunks` | `0` | 0 allows cluster-only pairs |
 | `--max-pairs` | `None` | Limit number of concept pairs (for testing) |
-| `--steps` | `all` | Pipeline steps: `ingest llm clustering pairpackets relations` |
+| `--steps` | all | `ingest llm clustering pairpackets relations` |
 
 ---
 
 ## Example
 
-```bash
-# Process CS 225 (Data Structures) lectures
-python main.py --data-dir ./cs225_lectures --out-dir ./cs225_kg
+A 379-page combined-notes PDF (CS 401/403), Qwen2.5-14B-Instruct via vLLM, ~47 minutes on an
+A100-80GB:
 
-# Output will include:
-# - 1,247 concepts extracted
-# - 3,891 concept pairs evaluated
-# - 423 prerequisite relationships identified
+```
+chunks:        279
+mentions:      950  (323 after the min_unique_chunks filter)
+concepts:      605  (71 after filtering)
+clusters:       74
+pairs:         180
+relations:     180  →  93 edges over 61 nodes
 ```
 
 **Sample extracted relationships:**
-- `arrays` → `linked lists` (prerequisite)
-- `trees` → `binary search trees` (prerequisite)
-- `graphs` → `graph traversal algorithms` (prerequisite)
+- `CONTRAPOSITIVE` → `NEGATION` (depends_on)
+- `BIJECTION` → `ONE_TO_ONE` (depends_on)
+- `CONCATENATION` → `REGULAR_EXPRESSIONS` (part_of)
 
 ---
 
@@ -164,22 +296,31 @@ python main.py --data-dir ./cs225_lectures --out-dir ./cs225_kg
 
 ```
 InstructKG/
-├── main.py                 # Main pipeline orchestrator
-├── ingest.py              # PDF → chunks conversion
-├── llm.py                 # Concept extraction + role classification
-├── clustering.py          # Context clustering (UMAP + HDBSCAN)
-├── pairpackets.py         # Evidence aggregation for pairs
-├── relation_judger.py     # Relation classification
-├── config.py              # Configuration defaults
-├── requirements.txt       # Python dependencies
-├── data/                  # Input PDFs (your lectures)
-└── out/                   # Output files
+├── main.py                            # Pipeline orchestrator
+├── ingest.py                          # PDF → chunks (docling; OCR mode from filename tag)
+├── llm.py                             # Concept extraction + role classification
+├── clustering.py                      # Context clustering (UMAP + HDBSCAN)
+├── pairpackets.py                     # Evidence aggregation for pairs
+├── relation_judger.py                 # Relation classification
+├── adapters.py                        # LLM provider abstraction (OpenAI/Anthropic/vLLM/HF)
+├── prompts.py                         # Prompt templates for every LLM stage
+├── response_parsing.py                # Tolerant JSON → Pydantic parsing
+├── config.py                          # Configuration defaults (.env)
+├── requirements.txt                   # Python dependencies
+├── evaluation/
+│   ├── eval.py                        # LLM-judge scorer
+│   └── final_eval.json                # Reference evaluation set
+├── knowledge_graph_visualization.ipynb # relations.jsonl → interactive HTML
+├── students_mapping.ipynb             # Concept-card analysis
+├── data/                              # Input PDFs (*_scan.pdf / *_text.pdf)
+└── out/                               # Output files, per course
     ├── chunks.jsonl
     ├── mentions.jsonl
     ├── concept_cards.jsonl
     ├── context_clusters.jsonl
     ├── pairpackets.jsonl
-    └── relations.jsonl    # Final knowledge graph
+    ├── relations.jsonl                # Final knowledge graph
+    └── kg_visualization.html
 ```
 
 ---
