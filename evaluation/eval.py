@@ -297,7 +297,7 @@ def main():
             "dynamic programming, finite automata and Turing machines, and P vs NP with "
             "polynomial-time reductions and NP-completeness"
         )
-        # [JR] official ME 200 catalog text, prereq/credit-hours line dropped
+        # [JR] official UIUC course catalog text
         me200_catalog_scope = (
             "introduction to classical thermodynamics through the second law; system "
             "and control volume analyses of thermodynamic processes; irreversibility "
@@ -317,6 +317,108 @@ def main():
             "thermodynamics; chemical reactions; power cycles; refrigeration cycles; "
             "air-conditioning; direct energy conversion"
         )
+        tam210_catalog_scope = (
+            "forces, moments, couples; resultants of force systems; equilibrium "
+            "analysis and free-body diagrams; analysis of forces acting on members "
+            "of trusses, frames, etc.; shear-force and bending-moment distributions; "
+            "Coulomb friction; centroids and center of mass; applications of statics "
+            "in design. Topics: review of vector algebra; forces, moments, couples; "
+            "equilibrium, equipollent systems, resultants, distributed forces; "
+            "equilibrium analysis, free-body diagrams, practical examples; trusses, "
+            "methods of joint and sections; multi-force members, shear-force and "
+            "bending-moment diagrams; statics and structural design; Coulomb "
+            "friction, applications; centroids and center of mass"
+        )
+        tam212_catalog_scope = (
+            "kinematics and dynamics of the three-dimensional motion of particles; "
+            "kinematics and dynamics of the plane motion of rigid bodies; methods of "
+            "work energy and impulse momentum; moving reference frames. Topics: "
+            "kinematics of a particle and of a system of particles; dynamics of "
+            "particles, Newton's laws, applications; kinematics of 2D motion of rigid "
+            "bodies; dynamics of 2D motion of rigid bodies; methods of work-energy "
+            "and impulse-momentum; moving reference frames"
+        )
+        me270_catalog_scope = (
+            "introduction to DFM methodologies and tools; material selection (new and "
+            "traditional materials); designing for primary manufacturing processes "
+            "(cutting fundamentals, casting, forming, and shaping); designing with "
+            "plastics (snap-fits, integral hinges, etc.); design for assembly (DFA); "
+            "geometric dimensioning and tolerancing (GD&T). Topics: DFM overview and "
+            "strategy; quality function deployment (QFD); concept selection; product "
+            "design specification; design for assembly; design for economic manufacture "
+            "(material removal, casting, forming, and shaping); designing with plastics; "
+            "geometric dimensioning and tolerancing; selection of materials (life-cycle "
+            "economics). Laboratory topics: machine tools; injection molding; CNC "
+            "machining; sand casting; rapid prototyping; water jet cutting; design of "
+            "experiments; inspection and metrology (CMM/GD&T)"
+        )
+        me310_catalog_scope = (
+            "introduction to fluid mechanics with coverage of theory and applications of "
+            "incompressible viscous and inviscid flows, and compressible high speed "
+            "flows. Topics: definitions and fluid kinematics; hydrostatics, including "
+            "manometers, Bourdon gauges and pressure transducers; control volume "
+            "equations for continuity, linear momentum, angular momentum, and energy; "
+            "Bernoulli's equation, including pitot tubes, Venturi meters, orifice meters "
+            "and hot wire anemometers; differential continuity and momentum equations; "
+            "dimensional similitude and model testing; viscous flows and pipe flows; "
+            "boundary layers, lift and drag; potential flow, superposition, numerical "
+            "solutions; compressible flow. Laboratory topics: fluid properties; "
+            "centrifugal pump characterization; free air jet; pipe flow; cylinder in "
+            "cross flow"
+        )
+        me320_catalog_scope = (
+            "principles and application of heat transfer by conduction, convection, and "
+            "thermal radiation. Topics: modes of heat transfer; temperature and "
+            "measurement devices; steady-state one-dimensional heat conduction; extended "
+            "surface heat transfer; transient one-dimensional heat conduction; numerical "
+            "methods in conduction; radiation heat transfer; wavelength-dependent surface "
+            "properties; directional characteristics of thermal radiation; view factors; "
+            "graybody exchange; convection heat transfer; external and internal flows; "
+            "heat exchangers. Laboratory topics: temperature measurement; conduction; "
+            "convection; heat exchangers; radiation"
+        )
+        me340_catalog_scope = (
+            "dynamic modeling of mechanical components and systems; time domain and "
+            "frequency domain analysis of linear time invariant systems; multi-degree of "
+            "freedom systems; linearization of nonlinear systems. Topics: Laplace "
+            "transformation, inverse transformation, solution of differential equations, "
+            "transfer functions, poles and zeros; modeling of dynamic systems by "
+            "conservation principles for mass, energy, fluid flow, heat transfer, and "
+            "mechanical and electromechanical systems, state (phase) space "
+            "representation; dynamic system classification, linearization of nonlinear "
+            "systems, dynamic simulation; time domain analysis of linear time invariant "
+            "systems, first and second order systems, time constant, damping ratio and "
+            "natural frequency, impulse response and convolution integral; frequency "
+            "domain analysis, frequency response, vibration isolation, base excitation, "
+            "measurement systems, Fourier series analysis; multi-degree-of-freedom "
+            "systems, natural frequencies and normal modes, beat generation and vibration "
+            "absorbers. Laboratory topics: complex numbers, partial fractions, "
+            "eigenvalues and eigenvectors; first-order systems and system identification; "
+            "block diagrams, transfer functions and simulation; second-order systems, "
+            "damping regimes; mode shapes and resonance; continuous systems and beam "
+            "vibration; nonlinear systems, Lagrange's equations, equilibria and stability"
+        )
+        tam251_catalog_scope = (
+            "relationship between internal stresses and deformations produced by external "
+            "forces acting on deformable bodies, and design principles based on mechanics "
+            "of solids: normal stresses, shear stresses, and deformations produced by "
+            "tensile, compressive, torsional, and bending loading of members; beam "
+            "deflections; elastic energy and impact; multi-dimensional stress states; and "
+            "buckling of columns. Topics: basic concepts of stress and strain; uniaxial "
+            "loading and deformation, statically determinate and indeterminate problems, "
+            "design based on yield strength and ultimate strength; torsion of circular "
+            "shafts and thin-walled sections, geometry of deformation, stress "
+            "distribution, design of shafts for power transmission; stresses due to "
+            "bending, symmetric elastic beams, transverse shear, built-up beams, design of "
+            "beams for structural applications; beam deflections, double integration, "
+            "direct integration, method of superposition; multi-axial stress and strain "
+            "states, transformation of stress and strain, Mohr's circle, principal "
+            "stresses and strains, plane stress and plane strain, yield criteria; buckling "
+            "of columns, Euler theory"
+        )
+        # [JR] me200/me400 keep the bare-title vs `_catalog` split that the completed
+        # 2x2 and 2x3 comparisons used. Courses added after that comparison carry the
+        # scope string on the bare key, since the bare-title condition was retired.
         course_map = {
             "algo": "Efficient Algorithms and Intractable Problems",
             "anlp": "Advanced Topics in Natural Language Processing",
@@ -328,6 +430,13 @@ def main():
             "cs401": f"iCAN Algorithms (CS 401) — {ican_scope}",
             "cs403": f"iCAN Algorithms (CS 403) — {ican_scope}",
             "cs401_403": f"iCAN Algorithms (CS 401/403) — {ican_scope}",
+            "tam210": f"Statics (TAM 210) — {tam210_catalog_scope}",
+            "tam212": f"Introductory Dynamics (TAM 212) — {tam212_catalog_scope}",
+            "tam251": f"Introductory Solid Mechanics (TAM 251) — {tam251_catalog_scope}",
+            "me270": f"Design for Manufacturability (ME 270) — {me270_catalog_scope}",
+            "me310": f"Fundamentals of Fluid Dynamics (ME 310) — {me310_catalog_scope}",
+            "me320": f"Heat Transfer (ME 320) — {me320_catalog_scope}",
+            "me340": f"Dynamics of Mechanical Systems (ME 340) — {me340_catalog_scope}",
         }
         if args.course_name not in course_map:
             print(f"✗ Error: Invalid course name '{args.course_name}'")
@@ -342,6 +451,12 @@ def main():
             print("RESULTS:")
             print(f"{'='*60}")
             print(json.dumps(result, indent=2))
+            # [JR] Honor --output_json here too (was batch-only); skip the
+            # default so plain runs don't drop a stray file in CWD.
+            if args.output_json != parser.get_default("output_json"):
+                with open(args.output_json, "w") as f:
+                    json.dump(result, f, indent=2)
+                print(f"\n✓ Saved results → {args.output_json}")
         return
 
     # BATCH MODE (original behavior)
