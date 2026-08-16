@@ -1074,6 +1074,113 @@ re-rendering cs401_403 headless: same 93 edges, no outputs added to the tracked 
 Single-record `relations.jsonl` files under `out/me200/Qwen14B/`, `out/sql/Qwen14B/`, and
 `out/sql/Qwen32B/` are aborted-run stubs, not results.
 
-Next: the null/non-null split, still unmeasured. Persisting per-item scores in `eval.py` makes it
-fall out of every future run rather than requiring a rescore — worth doing before the remaining
-courses are evaluated.
+Future work: `eval.py` discards per-item scores (`eval.py:131-135`, `eval.py:168-172`), so
+`triplet_accuracy` cannot be split into `None` and real-edge buckets. Until it is, the enrichment
+results carry a null-share confound and should be reported with it stated, not as clean effect sizes.
+
+Next: tam210 and tam212 at the current single configuration. *(Done — see the entry below.)*
+
+---
+
+## [2026-08-15] Single-config sweep complete — all in-scope courses evaluated under one judge
+
+tam210 and tam212 finished the combined pipeline → graph → eval loop, closing out the course
+set. Every in-scope course now has a full run down to visualization and an eval under the same
+judge (Qwen2.5-14B-Instruct, catalog-style course string). Per-course commands, stage counts,
+and eval tables are in `testing_cmds.md`; this entry records the cross-course picture.
+
+| Course | Config | Real edges | Null share | node_significance | triplet_accuracy |
+|---|---|---|---|---|---|
+| me340 | text | 485 | 26.1% | 0.9888 ± 0.074 | **0.7995 ± 0.248** |
+| cs401_403 | text, 16384 | 93 | 48.3% | 0.9508 ± 0.149 | 0.6833 ± 0.278 |
+| me400 | enriched | 2328 | 32.9% | 0.9833 ± 0.090 | 0.6822 ± 0.259 |
+| cs401 | text | 56 | 55.6% | 0.9429 ± 0.159 | 0.6786 ± 0.263 |
+| tam251 | text, enriched | 66 | 30.5% | 0.9118 ± 0.191 | 0.6737 ± 0.238 |
+| me270 | text | 251 | 69.4% | 0.9354 ± 0.168 | 0.6630 ± 0.266 |
+| tam212 | text, 16384 | 228 | 31.1% | 0.9706 ± 0.118 | 0.6571 ± 0.245 |
+| tam210 | text, 16384 | 50 | 26.5% | 1.0000 ± 0.000 | 0.6250 ± 0.289 |
+| me310 | scan (ffp) | 562 | 39.4% | 0.9402 ± 0.162 | 0.6207 ± 0.254 |
+| me320 | scan, ffp+enriched | 677 | 47.7% | 0.9530 ± 0.146 | 0.6189 ± 0.244 |
+| me200 | ffp+enriched | 1122 | 48.9% | 0.9821 ± 0.093 | 0.5841 ± 0.203 |
+
+me200/me400 rows are the catalog-string cells from the completed 2×2/2×3 comparisons.
+
+### me340 is the outlier, and it is largely compositional
+
+0.7995 sits 0.11 above the next course; everything else spans 0.58–0.68. Checked before
+reporting: no duplicate pairs (656 unique), justifications are substantive and directional
+("derived from", "used to derive"), and the highest-degree concepts form the course's linear
+spine (differential equations, Laplace transform, transfer function, frequency response, state
+space). But 94.4% of its real edges are `depends_on` — the highest single-relation
+concentration in the set — at the lowest null share (26.1%). Per the `part_of` survey above,
+triplet_accuracy on a near-single-relation corpus approaches pure depends_on direction
+accuracy. The score is real, not a measurement artifact, but it reflects a domain whose
+prerequisite structure is unusually linear; it should not be cited head-to-head against
+mixed-relation courses.
+
+### me270's two anomalies share one root cause
+
+The 69.4% null share (highest on record) and 42.2% `part_of` share of real edges (left
+unexplained in the survey above) both come from the corpus: the DFM material is dominated by
+enumerated checklists and taxonomies. Co-occurrence pairing over flat lists produces sibling
+pairs with no semantic relation, which the judge correctly nulls — 25.7% of me270's null
+justifications explicitly cite list co-membership, against 0.3–6.8% in four comparison
+courses. The pairs that survive are list parent/child or property-of pairs, which surface as
+`part_of`: all ten sampled `part_of` edges are list-membership calls, several dubious (e.g.
+ELECTRICAL_PROPERTIES → POLYETHYLENE reads a material property as a part). The judge behaves
+correctly; the artifact is upstream in pair generation. A fix would be list-aware pairing —
+not attempted.
+
+### tam210 carries a caveat
+
+node_significance 1.0000 ± 0.000 is a ceiling artifact at n=19 scored concepts, not a result.
+Thinnest corpus in the set (87 chunks, 19 kept concepts), and the only course where clusters
+(22) exceed kept concepts. Weakest entry; cite with the caveat attached.
+
+### node_significance still does not discriminate
+
+0.91–1.00 across all eleven configs, confirming the earlier finding. All usable variance is in
+triplet_accuracy (0.58–0.80).
+
+Future work (carried forward): per-item scores are still discarded by `eval.py`, so
+triplet_accuracy cannot be split into null and real-edge buckets, and the enrichment
+comparisons keep their null-share confound until that lands. Single-file eval runs now honor
+`--output_json`; results from before 2026-08-15 exist only in their log tails.
+
+---
+
+## [2026-08-15] Handoff prompt — summary and write-up
+
+For a fresh Claude session picking up the study write-up. Paste as-is.
+
+> Help complete the summary and write-up of the InstructKG course-material study in this repo
+> (`~/instructkg`). Read `CLAUDE.md` first, then the dated entries in `findings.md` from
+> 2026-08-14 onward, then `testing_cmds.md` (per-course commands, stage counts, eval tables,
+> and the "Course configs at a glance" table).
+>
+> State of the study: eleven course configurations are fully run (PDF → relations →
+> visualization) and evaluated under one judge, Qwen2.5-14B-Instruct with catalog-style course
+> strings. The cross-course results table is in the findings.md entry "Single-config sweep
+> complete" (2026-08-15). Raw outputs live under `out/<course>/` (gitignored, local-only —
+> treat as at-risk storage); eval results are in the per-course eval logs/JSONs and the
+> testing_cmds.md tables.
+>
+> Findings the write-up must carry, with their caveats:
+> 1. me340 (0.7995 triplet accuracy) is the outlier and is largely compositional — 94.4%
+>    depends_on edges in a linearly ordered domain; not comparable head-to-head with
+>    mixed-relation courses.
+> 2. me270's 69.4% null share and 42.2% part_of share have one root cause: checklist-structured
+>    corpus flooding co-occurrence pairing with list siblings and taxonomy pairs. Judge correct;
+>    artifact upstream in pair generation.
+> 3. tam210's node_significance 1.0000 ± 0.000 is a ceiling artifact at n=19 concepts; thinnest
+>    corpus (87 chunks). Weakest entry.
+> 4. node_significance is saturated (0.91–1.00) across all configs and does not discriminate;
+>    usable variance is in triplet_accuracy (0.58–0.80).
+> 5. part_of rates are comparable only within a judge tier (3B ≠ 14B/32B), and triplet_accuracy
+>    carries a null-share confound because eval.py discards per-item scores.
+> 6. OCR mode is set by PDF filename tag (`_scan`/`_text`) and dominates chunk yield — see the
+>    ME200/ME400 investigation entries and the configs table.
+>
+> Organize course-first, model second. Voice: third-person, impersonal, specific and factual,
+> lean — state what happened and what it means, then stop. Verify any number against
+> `testing_cmds.md` or the files under `out/` before using it; do not cite numbers from memory.

@@ -46,8 +46,29 @@ and not others.
   clusters = 177.
 - `me340`: run was **still in progress** at the time of writing (started
   2026-07-10 23:43 UTC, PID 1572, had only just finished loading the model
-  weights as of the last check) — mentions/concepts/clusters/pairs/relations
-  aren't produced yet, so they're left blank rather than backfilled.
+  weights as of the last check). Stats were backfilled from `run.log` after
+  completion — see its section.
+
+## Course configs at a glance
+
+The PDF filename tag drives OCR in `ingest.py`: `_scan` → `force_full_page_ocr=True`
+(native text discarded, full-page OCR), `_text` or no tag → native text extraction.
+One combined-notes PDF per course. All single-config runs used
+Qwen/Qwen2.5-14B-Instruct end to end (pipeline and judge).
+
+| Course | Input PDF | OCR | `VLLM_MAX_MODEL_LEN` |
+|---|---|---|---|
+| tam210 | `TAM210_CombinedNotes_text.pdf` | text | 16384 |
+| tam212 | `TAM212_CombinedNotes_text.pdf` | text | 16384 |
+| tam251 | `TAM251_CombinedNotes_text.pdf` | text | 16384 |
+| me270 | `ME270_CombinedNotes_text.pdf` | text | 8192 (default) |
+| me310 | `ME310&TAM335_CombinedNotes_scan.pdf` | ffp | 8192 (default) |
+| me320 | `ME320_CombinedNotes_scan.pdf` | ffp | 16384 |
+| me340 | `ME340_CombinedNotes_text.pdf` | text | 8192 (default) |
+| cs401_403 | `cs401_403_Combined_text.pdf` | text | 16384 |
+
+sql/me200/me400 ran multiple model × OCR variants — see their sections. me310's
+PDF combines ME 310 and TAM 335 material; it is treated as me310 throughout.
 
 ---
 
@@ -220,6 +241,13 @@ findings.md 2026-08-14.
 Kept counts (832 mentions, 118 concepts) match the log exactly; only the raw
 mentions total disagrees with what's recorded in `testing_cmds.txt`.
 
+Eval 2026-08-15 (Qwen2.5-14B-Instruct as judge, A100-80GB, ~9 min),
+`out/me320/Qwen14B_ffp_enriched/eval_me320_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 1295 | 629 | 48 | 618 | 117 | 0.9530 ± 0.146 | 0.6189 ± 0.244 |
+
 ## me270 — Qwen2.5-14B-Instruct (H200)
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me270 --out-dir out/me270 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me270/run.log 2>&1 &`
 
@@ -229,7 +257,17 @@ mentions total disagrees with what's recorded in `testing_cmds.txt`.
 
 Fully verified against `run.log` — no discrepancies.
 
-## me310 — Qwen2.5-14B-Instruct (H200)
+Eval 2026-08-15 (Qwen2.5-14B-Instruct as judge, A100-80GB, ~7 min),
+`out/me270/eval_me270_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 819 | 145 | 106 | 568 | 147 | 0.9354 ± 0.168 | 0.6630 ± 0.266 |
+
+Highest null share on record (69.4%) and highest `part_of` share of real edges
+(42.2%) — both traced to the checklist-structured corpus, findings.md 2026-08-15.
+
+## me310 — Qwen2.5-14B-Instruct (H200), ffp
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me310 --out-dir out/me310 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me310/run.log 2>&1 &`
 
 | Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
@@ -238,6 +276,13 @@ Fully verified against `run.log` — no discrepancies.
 
 Fully verified against `run.log` — no discrepancies.
 
+Eval 2026-08-15 (Qwen2.5-14B-Instruct as judge, A100-80GB, ~8 min),
+`out/me310/eval_me310_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 928 | 506 | 56 | 366 | 92 | 0.9402 ± 0.162 | 0.6207 ± 0.254 |
+
 ## me340 — Qwen2.5-14B-Instruct (H200)
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/me340 --out-dir out/me340 --llm-model Qwen/Qwen2.5-14B-Instruct > out/me340/run.log 2>&1 &`
 
@@ -245,7 +290,17 @@ Fully verified against `run.log` — no discrepancies.
 |---|---|---|---|---|---|
 | 306 | 1294 / 707 | 603 / 90 | 79 | 656 | 656 |
 
-458 `depends_on`, 27 `part_of`, 171 `None` — 485 real edges.
+Eval 2026-08-15 (Qwen2.5-14B-Instruct as judge, A100-80GB, ~7 min),
+`out/me340/eval_me340_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 656 | 458 | 27 | 171 | 89 | 0.9888 ± 0.074 | 0.7995 ± 0.248 |
+
+Highest triplet accuracy in the set by 0.11, and lowest null share (26.1%).
+Largely compositional — 94.4% of real edges are `depends_on` in a linearly
+ordered domain, so the score approaches pure direction accuracy; see
+findings.md 2026-08-15 before citing it against mixed-relation courses.
 
 ## tam251 — Qwen2.5-14B-Instruct (H200), enriched
 `nohup env LLM_PROVIDER=vllm python main.py --data-dir data/tam251 --out-dir out/tam251 --llm-model Qwen/Qwen2.5-14B-Instruct > out/tam251/run.log 2>&1 &`
@@ -256,6 +311,48 @@ Fully verified against `run.log` — no discrepancies.
 
 Fully verified against `run.log` (`out/tam251/Qwen14B_enriched/run.log`) — no
 discrepancies.
+
+Eval 2026-08-15 (Qwen2.5-14B-Instruct as judge, A100-80GB, ~5 min),
+`out/tam251/Qwen14B_enriched/eval_tam251_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 95 | 59 | 7 | 29 | 17 | 0.9118 ± 0.191 | 0.6737 ± 0.238 |
+
+## tam210 — Qwen2.5-14B-Instruct (A100-80GB), enriched
+Run 2026-08-15 via the combined pipeline → graph → eval loop below
+(`for C in tam210 tam212`), `VLLM_MAX_MODEL_LEN=16384`; pipeline ~22 min.
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 87 | 448 / 77 | 350 / 19 | 22 | 68 | 68 |
+
+Thinnest corpus in the set, and the only course where clusters (22) exceed
+kept concepts (19).
+
+Eval (~5 min), `out/tam210/eval_tam210_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 68 | 46 | 4 | 18 | 19 | 1.0000 ± 0.000 | 0.6250 ± 0.289 |
+
+The perfect node-significance score is a ceiling artifact at n=19, not a
+result — see findings.md 2026-08-15.
+
+## tam212 — Qwen2.5-14B-Instruct (A100-80GB), enriched
+Run 2026-08-15 via the same loop as tam210; pipeline ~43 min.
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 237 | 759 / 321 | 444 / 72 | 62 | 331 | 331 |
+
+Eval (~6 min), `out/tam212/eval_tam212_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 331 | 181 | 47 | 103 | 68 | 0.9706 ± 0.118 | 0.6571 ± 0.245 |
+
+14.2% `part_of` of all records — the highest share measured under the 14B judge.
 
 ---
 
@@ -314,19 +411,26 @@ courses already run:
 ### Combined pipeline → graph → eval
 
 ```bash
-C=me320
-nohup bash -c "set -e
+for C in tam210 tam212; do
+  mkdir -p out/$C
+  nohup bash -c "set -e
 LLM_PROVIDER=vllm VLLM_MAX_MODEL_LEN=16384 PYTHONUNBUFFERED=1 python main.py \
   --data-dir data/$C --out-dir out/$C --llm-model Qwen/Qwen2.5-14B-Instruct
 test -s out/$C/relations.jsonl
 KG_RELATIONS=out/$C/relations.jsonl jupyter nbconvert --to notebook --execute \
   --stdout knowledge_graph_visualization.ipynb > /dev/null
 PYTHONUNBUFFERED=1 python evaluation/eval.py --input_file out/$C/relations.jsonl \
-  --course_name $C --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b" \
-  > out/$C/overnight.log 2>&1 &
+  --course_name $C --model_name Qwen/Qwen2.5-14B-Instruct --method_name instructkg_qwen14b \
+  --output_json out/$C/eval_${C}_qwen14b.json \
+  > out/$C/eval_${C}_qwen14b.log 2>&1" > out/$C/run.log 2>&1
+done &
 ```
 
-Requires a `course_map` entry in `evaluation/eval.py` for `$C`.
+Courses run sequentially, one GPU at a time. Pipeline and graph output to
+`out/<course>/run.log`, eval to `out/<course>/eval_<course>_<model>.log`.
+Requires a `course_map` entry in `evaluation/eval.py` for `$C`. As of
+2026-08-15 single-file mode writes `--output_json` too; earlier runs' results
+live only in their log tails.
 
 ---
 
