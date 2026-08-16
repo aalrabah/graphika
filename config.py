@@ -12,13 +12,8 @@ def env_int(name: str, default: int) -> int:
 
 # outputs / chunking
 OUT_DIR = os.getenv("OUT_DIR", "out")
-# [JR] restored to original 8191 -- the 6000 value (see findings.md,
-# 2026-07-07/2026-07-08 entries) didn't actually buy real headroom: docling's
-# HybridChunker counts MAX_TOKENS using its own default tokenizer
-# (sentence-transformers/all-MiniLM-L6-v2), not the Qwen tokenizer that
-# governs VLLM_MAX_MODEL_LEN at LLM-call time -- so the two numbers were
-# never directly comparable. The actual fix for context overflow is
-# VLLM_MAX_MODEL_LEN (adapters.py), not this chunk-size budget.
+# [JR] 8191, not 6000: HybridChunker counts tokens with its own tokenizer, not
+# Qwen's, so this never bounded VLLM_MAX_MODEL_LEN. findings.md 2026-07-07.
 MAX_TOKENS = env_int("MAX_TOKENS", 8191)
 CONCURRENCY = env_int("CONCURRENCY", 5)
 

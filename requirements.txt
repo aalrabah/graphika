@@ -11,23 +11,12 @@ scikit-learn
 umap-learn
 hdbscan
 
-# --- Added by Claude (Anthropic) + Jeffry Royce, 2026-07-03 ---
-# Pin vllm to 0.19.1, NOT latest. vllm>=0.20.x pins torch==2.11.0, whose default
-# PyPI build requires CUDA 13 (nvidia-*-cu13 packages). This NCSA container's GPU
-# driver (570.211.01) only supports up to CUDA 12.8, so torch's CUDA init fails,
-# which silently surfaces as a vLLM "EngineCore socket handshake" error/timeout
-# with no clear message pointing at the real cause.
-# vllm==0.19.1 resolves to torch==2.10.0, whose default build depends on
-# nvidia-*-cu12 packages that this driver supports. Verified working end-to-end
-# (EngineCore start + generation) on this container on 2026-07-03.
-# Do not bump vllm past this pin without confirming the NCSA driver has been
-# updated to support CUDA 13, or re-verifying against whatever driver is present.
+# [JR] Pin vllm: 0.20.x needs CUDA 13, but the NCSA driver (570.211.01) caps at
+# 12.8. The failure is opaque, an "EngineCore socket handshake" error/timeout.
+# Don't bump without confirming the driver.
 vllm==0.19.1
-# --- end Claude + Jeffry Royce addition ---
 
-# [JR] Imported but previously undeclared: json_repair by evaluation/eval.py,
-# neo4j-viz by knowledge_graph_visualization.ipynb, anthropic by adapters.py,
-# numpy across clustering/eval, nbconvert to run the visualization notebook headless.
+# [JR] Imported but previously undeclared; needed for evaluation and visualization
 json_repair
 neo4j-viz
 anthropic

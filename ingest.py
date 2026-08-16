@@ -40,34 +40,20 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     pdf_path = str(pdf_path)
     lecture_id = Path(pdf_path).stem
 
-    # [JR] force_full_page_ocr: must be set on ocr_options, not PdfPipelineOptions
-    # directly (pydantic silently drops unknown top-level kwargs, so this failed
-    # silently before). Now auto-detected from the filename tag above instead
-    # of hardcoded.
-    #   False (no tag, or "_text") -- text-based material (typed slides, text
-    #     PDFs). Docling keeps the native/embedded text layer and only OCRs
-    #     bitmap regions its layout model flags (>5% of page area by default).
-    #     Safe: doesn't touch already-clean text.
-    #   True ("_scan") -- scanned/handwritten material with little to no usable
-    #     native text layer. Forces OCR on the entire page, but this DISCARDS
-    #     native text cells wherever they exist -- fine when there's ~nothing
-    #     to lose (e.g. ME200), actively harmful on typed material (re-OCRs and
-    #     corrupts already-good text; see ME400 case in findings.md).
+    # [JR] force_full_page_ocr must be set on ocr_options, not PdfPipelineOptions;
+    # pydantic silently drops unknown top-level kwargs. Auto-detected from the
+    # filename tag above:
+    #   "_scan" -> True: OCRs the whole page and DISCARDS native text cells. Right
+    #     for scanned material, corrupts typed material (ME400, findings.md).
+    #   "_text"/untagged -> False: keeps native text, OCRs only bitmap regions.
     is_scanned = _is_scanned_from_filename(pdf_path)
     print(f"   [ingest] {lecture_id}: force_full_page_ocr={is_scanned}")
 
-    # [JR] enable docling's formula/code recognition (CodeFormulaV2 model) so
-    # equations and code blocks get real text instead of a "formula-not-decoded"
-    # placeholder -- see findings.md 2026-07-06 entry (687-689 unrendered
-    # formula placeholders per ME200/ME400 doc). NOT purely additive: any
-    # region the layout model labels FORMULA or CODE gets unconditionally
-    # re-recognized from an image crop and overwrites the existing text there,
-    # even if that region already had good native/OCR text (e.g. a
-    # CoolProp/EES numeric-output screenshot) -- see findings.md 2026-07-07
-    # entry for the ME400 chunk-diff that found this, including a handful of
-    # cases where re-recognition silently altered numeric values. Only text
-    # OUTSIDE FORMULA/CODE-labeled regions is untouched.
-    # To restore docling's default (no enrichment), set both back to False.
+    # [JR] CodeFormulaV2 recognition, so equations/code get real text instead of
+    # "formula-not-decoded" placeholders (687-689 per doc). NOT purely additive:
+    # any FORMULA/CODE-labeled region is re-recognized from an image crop and
+    # overwrites existing good text. findings.md 2026-07-07 caught it silently
+    # altering numeric values. Set both False for docling's default.
     ENABLE_FORMULA_ENRICHMENT = True
     ENABLE_CODE_ENRICHMENT = True
 
@@ -81,7 +67,6 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
             InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_pipeline_options)
         }
     )
-    # [JR] end force_full_page_ocr block
 
     result = converter.convert(pdf_path)
     dl_doc = result.document
