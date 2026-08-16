@@ -26,6 +26,10 @@ vllm==0.19.1
 # --- end Claude + Jeffry Royce addition ---
 
 # [JR] Imported but previously undeclared: json_repair by evaluation/eval.py,
-# neo4j-viz by knowledge_graph_visualization.ipynb.
+# neo4j-viz by knowledge_graph_visualization.ipynb, anthropic by adapters.py,
+# numpy across clustering/eval, nbconvert to run the visualization notebook headless.
 json_repair
 neo4j-viz
+anthropic
+numpy
+nbconvert
