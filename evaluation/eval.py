@@ -416,6 +416,27 @@ def main():
             "stresses and strains, plane stress and plane strain, yield criteria; buckling "
             "of columns, Euler theory"
         )
+        mse280_catalog_scope = (
+            "materials science and engineering of ceramics, electronic materials, metals "
+            "and polymers; bonding; crystallography; imperfections; processing and "
+            "properties of semiconductors, polymers, metals, ceramics and composites; "
+            "phase diagrams; case studies"
+        )
+        mse494_catalog_scope = (
+            "introduction to design methodologies in the context of materials science and "
+            "engineering. Topics: human centered design (HCD); statistical modeling; "
+            "design tradeoffs; material selection; materials design; team management; "
+            "development of design projects for implementation in a subsequent course "
+            "(MSE 495); objectives and constraints such as economic, manufacturability, "
+            "environmental, ethical, health and safety, sustainability, social, and "
+            "political concerns as they relate to project design"
+        )
+        mse495_catalog_scope = (
+            "continuation of MSE 494: design teams evaluate alternatives, finalize "
+            "concepts, model and analyze solutions, build and test a final product "
+            "(physical or digital), and present the results professionally; solutions "
+            "build on earlier course work and incorporate realistic constraints"
+        )
         # [JR] me200/me400 keep the bare-title vs `_catalog` split that the completed
         # 2x2 and 2x3 comparisons used. Courses added after that comparison carry the
         # scope string on the bare key, since the bare-title condition was retired.
@@ -437,6 +458,9 @@ def main():
             "me310": f"Fundamentals of Fluid Dynamics (ME 310) — {me310_catalog_scope}",
             "me320": f"Heat Transfer (ME 320) — {me320_catalog_scope}",
             "me340": f"Dynamics of Mechanical Systems (ME 340) — {me340_catalog_scope}",
+            "mse280": f"Engineering Materials (MSE 280) — {mse280_catalog_scope}",
+            "mse494": f"Materials Design Thinking (MSE 494) — {mse494_catalog_scope}",
+            "mse495": f"Materials Design (MSE 495) — {mse495_catalog_scope}",
         }
         if args.course_name not in course_map:
             print(f"✗ Error: Invalid course name '{args.course_name}'")
