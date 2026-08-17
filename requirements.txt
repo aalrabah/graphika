@@ -25,3 +25,7 @@ nbconvert
 
 # [JR] make_packet.py (instructor review packet .docx generator)
 python-docx
+
+# [JR] docling->rapidocr also pulls full opencv-python, which needs libGL and
+# can clobber this. After install: pip install --force-reinstall --no-deps opencv-python-headless
+opencv-python-headless

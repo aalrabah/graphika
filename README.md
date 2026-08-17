@@ -77,6 +77,15 @@ pip install --user -r requirements.txt
 `neo4j-viz` and `json_repair` in particular fail or silently disappear without this on
 `/opt/conda`-style installs.
 
+On headless machines, follow with:
+
+```bash
+pip install --force-reinstall --no-deps opencv-python-headless
+```
+
+(rapidocr pulls the full `opencv-python`, which can overwrite the headless `cv2` and then
+fail to import without `libGL.so.1`.)
+
 ### Choosing an LLM backend
 
 `LLM_PROVIDER` selects the backend. It defaults to `openai`.
