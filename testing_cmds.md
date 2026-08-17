@@ -66,6 +66,9 @@ Qwen/Qwen2.5-14B-Instruct end to end (pipeline and judge).
 | me320 | `ME320_CombinedNotes_scan.pdf` | ffp | 16384 |
 | me340 | `ME340_CombinedNotes_text.pdf` | text | 8192 (default) |
 | cs401_403 | `cs401_403_Combined_text.pdf` | text | 16384 |
+| mse280 | `MSE280_CombinedNotes_text.pdf` | text | 16384 |
+| mse494 | `mse494_combined_text.pdf` | text | 16384 |
+| mse495 | `mse495_combined_text.pdf` | text | 16384 |
 
 sql/me200/me400 ran multiple model × OCR variants — see their sections. me310's
 PDF combines ME 310 and TAM 335 material; it is treated as me310 throughout.
@@ -393,6 +396,48 @@ model load dominated (~5 min).
 Needs the `--course_name cs401` map entry and the `--max_model_len` fix — see
 findings.md 2026-08-14. Single-file mode prints results to stdout only, so the
 log is the sole record.
+
+---
+
+## mse280 — Qwen2.5-14B-Instruct (A100-80GB), enriched
+Run 2026-08-16 via the combined pipeline → graph → eval recipe below,
+`VLLM_MAX_MODEL_LEN=16384`; pipeline ~2 h 22 min.
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 955 | 2875 / 818 | 1802 / 171 | 251 | 647 | 647 |
+
+Eval (~9 min), `out/mse280/eval_mse280_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 647 | 252 | 80 | 315 | 147 | 0.9898 ± 0.071 | 0.7403 ± 0.251 |
+
+## mse494 — Qwen2.5-14B-Instruct (A100-80GB), enriched
+Run 2026-08-16 via the same recipe; pipeline ~49 min.
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 289 | 1133 / 407 | 710 / 75 | 70 | 123 | 123 |
+
+Eval (~10 min), `out/mse494/eval_mse494_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 123 | 56 | 4 | 63 | 53 | 0.8208 ± 0.240 | 0.7520 ± 0.250 |
+
+## mse495 — Qwen2.5-14B-Instruct (A100-80GB), enriched
+Run 2026-08-16 via the same recipe; pipeline ~39 min.
+
+| Chunks | Mentions (raw/kept) | Concepts (raw/kept) | Clusters | Pairs | Relations |
+|---|---|---|---|---|---|
+| 420 | 1385 / 585 | 766 / 114 | 109 | 252 | 252 |
+
+Eval (~6 min), `out/mse495/eval_mse495_qwen14b.log`:
+
+| Records | depends_on | part_of | None | Nodes scored | Node significance | Triplet accuracy |
+|---|---|---|---|---|---|---|
+| 252 | 143 | 10 | 99 | 86 | 0.8140 ± 0.253 | 0.7897 ± 0.247 |
 
 ---
 

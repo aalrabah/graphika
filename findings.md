@@ -1148,3 +1148,56 @@ comparisons keep their null-share confound until that lands. Single-file eval ru
 `--output_json`; results from before 2026-08-15 exist only in their log tails.
 
 ---
+
+## [2026-08-16] mse494 ingest crash: full opencv-python clobbered headless cv2
+
+First mse494 run died in ingest — docling's table model imports `cv2`, which failed with
+`ImportError: libGL.so.1`. The Aug 16 `pip install -r requirements.txt` pulled the full
+`opencv-python` (via docling → rapidocr), overwriting the headless `cv2` that vllm had
+installed; the full build needs libGL, absent on the headless box. A `--dry-run` fresh
+resolve confirms both opencv variants land, so clean installs can hit the same collision.
+Fix: `pip install --force-reinstall --no-deps opencv-python-headless` after requirements
+(documented in README). Side note: the resolve pulls rapidocr without onnxruntime, so fresh
+installs have no working OCR engine — only matters for scanned-PDF courses.
+
+---
+
+## [2026-08-16] MSE trio (mse280, mse494, mse495) — node significance splits by course type
+
+All three MSE courses ran the standard single config (Qwen2.5-14B judge, catalog course
+string, text OCR, `VLLM_MAX_MODEL_LEN=16384`); commands and stage counts in
+`testing_cmds.md`. Updated cross-course chart:
+
+| Course | Config | Real edges | Null share | node_significance | triplet_accuracy |
+|---|---|---|---|---|---|
+| me340 | text | 485 | 26.1% | 0.9888 ± 0.074 | **0.7995 ± 0.248** |
+| mse495 | text, 16384 | 153 | 39.3% | 0.8140 ± 0.253 | 0.7897 ± 0.247 |
+| mse494 | text, 16384 | 60 | 51.2% | 0.8208 ± 0.240 | 0.7520 ± 0.250 |
+| mse280 | text, 16384 | 332 | 48.7% | 0.9898 ± 0.071 | 0.7403 ± 0.251 |
+| cs401_403 | text, 16384 | 93 | 48.3% | 0.9508 ± 0.149 | 0.6833 ± 0.278 |
+| me400 | enriched | 2328 | 32.9% | 0.9833 ± 0.090 | 0.6822 ± 0.259 |
+| cs401 | text | 56 | 55.6% | 0.9429 ± 0.159 | 0.6786 ± 0.263 |
+| tam251 | text, enriched | 66 | 30.5% | 0.9118 ± 0.191 | 0.6737 ± 0.238 |
+| me270 | text | 251 | 69.4% | 0.9354 ± 0.168 | 0.6630 ± 0.266 |
+| tam212 | text, 16384 | 228 | 31.1% | 0.9706 ± 0.118 | 0.6571 ± 0.245 |
+| tam210 | text, 16384 | 50 | 26.5% | 1.0000 ± 0.000 | 0.6250 ± 0.289 |
+| me310 | scan (ffp) | 562 | 39.4% | 0.9402 ± 0.162 | 0.6207 ± 0.254 |
+| me320 | scan, ffp+enriched | 677 | 47.7% | 0.9530 ± 0.146 | 0.6189 ± 0.244 |
+| me200 | ffp+enriched | 1122 | 48.9% | 0.9821 ± 0.093 | 0.5841 ± 0.203 |
+
+### node significance finally discriminates — by course type, not extraction quality
+
+mse494 (0.821) and mse495 (0.814) are the first scores below the 0.91–1.00 band; mse280
+(0.990) stays inside it. The two low scorers are design-process courses whose kept concepts
+(WORK_PLAN, PRESENTATIONS, CHUNK_THEMES) read as workflow steps rather than syllabus topics,
+so the judge scores them as marginal against the catalog string. The metric tracks
+vocabulary-vs-catalog match, not graph quality.
+
+### design courses are near-single-relation corpora
+
+mse494 and mse495 real edges are 93% `depends_on` (workflow ordering: establish problem
+space → document biases), vs 76/24 `depends_on`/`part_of` for content-course mse280. The
+me340 caveat applies: their triplet_accuracy approaches pure direction accuracy. With that
+caveat, the MSE trio takes three of the top four triplet_accuracy slots.
+
+---
