@@ -13,3 +13,11 @@ out/*
 doc/
 *.jsonl
 *.log
+
+# Upstream's sample input and sample output, tracked in the base repo. The
+# broad rules above would otherwise drop them from this fork. Must stay below
+# the *.jsonl rule -- the last matching pattern wins.
+!data/sql/
+data/sql/*
+!data/sql/3-SQL2-JOINS_Nulls.pdf
+!out/relations_sql_qwen14b.jsonl

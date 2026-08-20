@@ -17,6 +17,12 @@
 > extended for a study over UIUC course materials. The Overview and Architecture below are the
 > original author's. This fork adds local-model support via vLLM, an evaluation harness, graph
 > visualization, and the operational documentation needed to reproduce a run end to end.
+>
+> Two files carry most of what was learned running it. **`findings.md`** is a dated,
+> append-only investigation log — root causes, benchmarks, and things ruled out; check it
+> before re-investigating anything that may already be diagnosed. **`testing_cmds.md`** is the
+> per-course run log, organized by course then model, with the stage-by-stage output counts a
+> healthy run should produce.
 
 ---
 
@@ -299,6 +305,26 @@ questions. Change the seed to draw a fresh sample.
 | `--part-a-note` | `None` | Extra sentence in the Part A footnote |
 | `--sample` | off | Render the banner label in red |
 | `--return-by` / `--return-email` | `[date]` / `[email]` | Fill the return lines |
+
+---
+
+## Backing up outputs
+
+`data/`, `out/`, `*.jsonl` and `*.log` are gitignored — input PDFs and every pipeline output are
+local-only by design. Course PDFs run 20–80 MB each and every run adds a multi-megabyte HTML
+graph, none of which belongs in git history. This study mirrored `out/` to a Google Drive folder
+with [rclone](https://rclone.org/drive/) instead.
+
+One-time setup: `rclone config`, choose Google Drive, name the remote `gdrive`. Then create a
+Drive folder to hold the outputs and copy its ID out of the folder URL
+(`drive.google.com/drive/folders/<ID>`).
+
+```bash
+rclone copy out/ "gdrive,root_folder_id=<PASTE_ID_HERE>:"
+```
+
+- Safe to rerun at any time — `copy` only uploads new or changed files, and never deletes on the
+  remote. (`rclone sync` does delete; don't substitute it here.)
 
 ---
 
