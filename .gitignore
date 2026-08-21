@@ -1,1 +1,23 @@
 .env
+__pycache__/
+
+# Holds input course material, not tracked by git and
+# likely to include proprietary content.
+data/*
+
+# Holds all pipeline output logs and jsons.
+# Grows rapidy with many runs.
+out/*
+
+# Context documentation and log files
+doc/
+*.jsonl
+*.log
+
+# Upstream's sample input and sample output, tracked in the base repo. The
+# broad rules above would otherwise drop them from this fork. Must stay below
+# the *.jsonl rule -- the last matching pattern wins.
+!data/sql/
+data/sql/*
+!data/sql/3-SQL2-JOINS_Nulls.pdf
+!out/relations_sql_qwen14b.jsonl

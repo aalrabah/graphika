@@ -1,3 +1,210 @@
+#### NOTE (2026-07-11): this .txt is now for quick manual notes only ####
+The structured, course-organized, kept-stats-backfilled version of this log
+lives in testing_cmds.md — that's the canonical reference going forward.
+Keep using this file for fast, no-formatting notes jotted while a run is
+in progress; fold anything worth keeping into testing_cmds.md afterward.
+####
+
+#### Jeffry's test log ####
+
+Google Drive backup (rclone, remote "gdrive:") -- addressed by folder ID since
+Drive was reorganized after initial setup and the old path-based address
+(gdrive:InstructKG/Output) no longer resolves under the drive.file OAuth scope.
+Replace <PASTE_ID_HERE> with the current Output folder's ID from its Drive URL
+(drive.google.com/drive/folders/<ID>). Safe to rerun anytime -- only pushes
+new/changed files.
+  rclone copy out/ "gdrive,root_folder_id=1fYx3ElbdwjGPvxe8b1BTzJ01j20nP-iL:"
+
+Qwen3B testing on A100 GPU
+  SQL    // text slides
+    LLM_PROVIDER=vllm python main.py   --data-dir data/sql   --steps ingest llm clustering pairpackets   --out-dir out/sql   --llm-model Qwen/Qwen2.5-3B-Instruct
+      13 chunks
+      4 mentions
+      57 concepts
+      2 clusters
+      0 pairs
+  me200_Ch1    // handwritten scans
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --steps ingest llm clustering pairpackets   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      2 chunks
+      2 mentions
+      2 concepts
+      ERROR: chunks must have more than one neighbor (I think)
+  me200_CombinedNotes    // handwritten scans - weak concept extraction 
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --steps ingest llm clustering pairpackets   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      24 chunks
+      29 mentions
+      67 concepts
+      6 clusters
+      11 pairs
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct
+      24 chunks
+      29 mentions
+      67 concepts
+      6 clusters
+      11 pairs
+      11 relations
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-3B-Instruct   > out/me200/run.log 2>&1 &
+      442 chunks_ffp
+      2413 mentions
+      1301 concepts
+      116 clusters
+      3109 pairs
+      3109 relations
+  me400_CombinedNotes   // more similar to sql material (text slides)
+    LLM_PROVIDER=vllm python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-3B-Instruct
+      725 chunks!!
+      2300 mentions
+      1423 concepts
+      180 clusters
+      4777 pairs
+      4777 relations
+
+Qwen14B testing on H200 GPU
+  sql
+    # [JR] switched to nohup + log so the run survives Jupyter connection drops
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/sql   --out-dir out/sql   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/sql/run.log 2>&1 &
+      13 chunks
+      6 mentions
+      35 concepts
+      3 clusters
+      1 pairs
+      1 relations
+  me200
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me200/run.log 2>&1 &
+      24 chunks
+      7 mentions
+      44 concepts
+      2 clusters
+      1 pairs
+      1 relations
+  me200_ffp (force_full_page)
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me200/run.log 2>&1 &
+      442 chunks
+      1760 mentions
+      890 concepts
+      121 clusters
+      1711 pairs
+      1711 relations
+  me200_ffp_enriched
+    nohup env LLM_PROVIDER=vllm   VLLM_MAX_MODEL_LEN=16384   python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me200/run.log 2>&1 &
+      443 chunks
+      1833 mentions
+      867 concepts
+      120 clusters
+      2195 pairs
+      2195 relations
+  me400
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me400/run.log 2>&1 &
+      725 chunks
+      1799 mentions
+      1118 concepts
+      174 clusters
+      3158 pairs
+      3158 relations
+  me400_ffp (force_full_page)
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me400/run.log 2>&1 &
+      749 chunks
+      2848 mentions
+      1131 concepts
+      171 clusters
+      3168 pairs
+      3168 relations
+  me400_enriched
+    nohup env LLM_PROVIDER=vllm   VLLM_MAX_MODEL_LEN=16384   python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me400/run.log 2>&1 &
+      727 chunks
+      2991 mentions
+      1136 concepts
+      178 clusters
+      3472 pairs
+      3472 relations
+
+Qwen32B testing on H200 GPU
+  sql
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/sql   --out-dir out/sql   --llm-model Qwen/Qwen2.5-32B-Instruct   > out/sql/run.log 2>&1 &
+    13 chunks
+    59 mentions
+    47 concepts
+    3 clusters
+    1 pairs
+    1 relations
+  me200 
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me200   --out-dir out/me200   --llm-model Qwen/Qwen2.5-32B-Instruct   > out/me200/run.log 2>&1 &
+    442 chunks
+    2328 mentions
+    1120 concepts
+    121 clusters
+    3468 pairs
+    3468 relations
+  me400
+    nohup env LLM_PROVIDER=vllm python main.py   --data-dir data/me400   --out-dir out/me400   --llm-model Qwen/Qwen2.5-32B-Instruct   > out/me400/run.log 2>&1 &
+    725 chunks
+    3600 mentions
+    1254 concepts
+    174 clusters
+    5108 pairs
+    5108 relations
+  
+
+TEMPLATE
+  classNUM
+    bash command
+     chunks
+     mentions (kept )
+     concepts (kept )
+     clusters
+     pairs
+     relations
+
+  me320
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me320   --out-dir out/me320   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me320/run.log 2>&1 &
+    424 chunks
+    2729 mentions (kept 832)
+    889 concepts (kept 118)
+    122 clusters
+    1295 pairs
+    1295 relations
+
+  me270
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me270   --out-dir out/me270   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me270/run.log 2>&1 &
+    716 chunks
+    3364 mentions (kept 1006)
+    2225 concepts (kept 190)
+    206 clusters
+    819 pairs
+    819 relations
+
+  me310
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me310   --out-dir out/me310   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me310/run.log 2>&1 &
+    235 chunks
+    1017 mentions (kept 501)
+    550 concepts (kept 94)
+    64 clusters
+    928 pairs
+    928 relations
+
+  me340
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/me340   --out-dir out/me340   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/me340/run.log 2>&1 &
+    306 chunks
+     mentions (kept )
+     concepts (kept )
+     clusters
+     pairs
+     relations
+
+
+  tam251
+    nohup env LLM_PROVIDER=vllm   python main.py   --data-dir data/tam251   --out-dir out/tam251   --llm-model Qwen/Qwen2.5-14B-Instruct   > out/tam251/run.log 2>&1 &
+    73 chunks
+    383 mentions (kept 94)
+    289 concepts (kept 21)
+    21 clusters
+    95 pairs
+    95 relations
+
+
+#### End of Jeffry's test log ####
+
+
 LLM_PROVIDER=hf python main.py --steps ingest llm clustering pairpackets --out-dir out --llm-model meta-llama/Llama-3.2-3B-Instruct
 
 
@@ -18,7 +225,6 @@ LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python main.py   --data-dir da
 
 
 LLM_PROVIDER=hf HF_BATCH_SIZE=8 LLM_CHUNK_BATCH=4 python relation_judger.py  --data-dir data/anlp   --out-dir out/anlp   --llm-model meta-llama/Llama-3.2-3B-Instruct
-
 
 
 ## llama 3B ## experiment

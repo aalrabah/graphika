@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, OcrAutoOptions
 from docling.chunking import HybridChunker
 
 from config import MAX_TOKENS, OUT_DIR
@@ -23,6 +25,13 @@ def _safe_pages(chunk) -> List[int]:
     return sorted(pages) if pages else []
 
 
+# [JR] new helper: infer scan vs. text from a "_scan"/"_text" filename tag,
+# so switching between courses doesn't require hand-editing this file
+def _is_scanned_from_filename(pdf_path: str) -> bool:
+    tokens = Path(pdf_path).stem.lower().split("_")
+    return "scan" in tokens
+
+
 def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     """
     Convert one PDF to chunk records (text + metadata).
@@ -31,7 +40,34 @@ def pdf_to_chunks(pdf_path: str) -> List[Dict[str, Any]]:
     pdf_path = str(pdf_path)
     lecture_id = Path(pdf_path).stem
 
-    converter = DocumentConverter()
+    # [JR] force_full_page_ocr must be set on ocr_options, not PdfPipelineOptions;
+    # pydantic silently drops unknown top-level kwargs. Auto-detected from the
+    # filename tag above:
+    #   "_scan" -> True: OCRs the whole page and DISCARDS native text cells. Right
+    #     for scanned material, corrupts typed material (ME400, findings.md).
+    #   "_text"/untagged -> False: keeps native text, OCRs only bitmap regions.
+    is_scanned = _is_scanned_from_filename(pdf_path)
+    print(f"   [ingest] {lecture_id}: force_full_page_ocr={is_scanned}")
+
+    # [JR] CodeFormulaV2 recognition, so equations/code get real text instead of
+    # "formula-not-decoded" placeholders (687-689 per doc). NOT purely additive:
+    # any FORMULA/CODE-labeled region is re-recognized from an image crop and
+    # overwrites existing good text. findings.md 2026-07-07 caught it silently
+    # altering numeric values. Set both False for docling's default.
+    ENABLE_FORMULA_ENRICHMENT = True
+    ENABLE_CODE_ENRICHMENT = True
+
+    pdf_pipeline_options = PdfPipelineOptions(
+        ocr_options=OcrAutoOptions(force_full_page_ocr=is_scanned),
+        do_formula_enrichment=ENABLE_FORMULA_ENRICHMENT,
+        do_code_enrichment=ENABLE_CODE_ENRICHMENT,
+    )
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_pipeline_options)
+        }
+    )
+
     result = converter.convert(pdf_path)
     dl_doc = result.document
 

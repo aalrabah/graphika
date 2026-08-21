@@ -290,11 +290,15 @@ class _VLLMLocalEngine:
         )
 
         # Generate (vLLM handles batching internally)
+        # [JR] Remove try/except block for loud fail
+        outputs = self.llm.generate(prompts, sampling_params, use_tqdm=False)
+        '''
         try:
             outputs = self.llm.generate(prompts, sampling_params, use_tqdm=False)
         except Exception as e:
             print(f"[vLLM] Generate failed: {e}")
             return [""] * len(users)
+        '''
 
         # Extract generated text
         results: List[str] = []

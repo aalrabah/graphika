@@ -10,3 +10,22 @@ sentence-transformers
 scikit-learn
 umap-learn
 hdbscan
+
+# [JR] Pin vllm: 0.20.x needs CUDA 13, but the NCSA driver (570.211.01) caps at
+# 12.8. The failure is opaque, an "EngineCore socket handshake" error/timeout.
+# Don't bump without confirming the driver.
+vllm==0.19.1
+
+# [JR] Imported but previously undeclared; needed for evaluation and visualization
+json_repair
+neo4j-viz
+anthropic
+numpy
+nbconvert
+
+# [JR] make_packet.py (instructor review packet .docx generator)
+python-docx
+
+# [JR] docling->rapidocr also pulls full opencv-python, which needs libGL and
+# can clobber this. After install: pip install --force-reinstall --no-deps opencv-python-headless
+opencv-python-headless

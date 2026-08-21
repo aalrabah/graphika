@@ -395,7 +395,8 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    chunks_path = str(out_dir / "chunks.jsonl")
+    # [JR] use whatever chunks*.jsonl file already exists (e.g. a manually staged chunks_enriched_8191.jsonl)
+    chunks_path = str(next(out_dir.glob("chunks*.jsonl"), out_dir / "chunks.jsonl"))
     mentions_path = str(out_dir / "mentions.jsonl")
     concept_cards_path = str(out_dir / "concept_cards.jsonl")
     clusters_path = str(out_dir / "context_clusters.jsonl")
@@ -406,12 +407,17 @@ def main() -> None:
         args.max_pairs = None
 
     # Step 1: ingest
+    # [JR] Skip ingest if chunks.jsonl already exists in out_dir, to save time on reruns
     if "ingest" in args.steps:
-        data_dir = Path(args.data_dir)
-        pdfs = list_pdfs_in_sequence(data_dir)
-        if not pdfs:
-            raise SystemExit(f"❌ No PDFs found in ./{args.data_dir}")
-        ingest.ingest_pdfs(pdfs, out_name="chunks.jsonl", out_dir=str(out_dir))
+        # if Path(chunks_path).exists():
+        if any(out_dir.glob("chunks*.jsonl")):
+            print(f"[ingest] found existing {chunks_path}, skipping ingest")
+        else:
+            data_dir = Path(args.data_dir)
+            pdfs = list_pdfs_in_sequence(data_dir)
+            if not pdfs:
+                raise SystemExit(f"❌ No PDFs found in ./{args.data_dir}")
+            ingest.ingest_pdfs(pdfs, out_name="chunks.jsonl", out_dir=str(out_dir))
 
     # Step 2: LLM => mentions + concept cards
     if "llm" in args.steps:

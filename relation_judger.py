@@ -32,6 +32,14 @@ ALLOWED_RELATIONS = {"depends_on", "part_of"}
 # Batch size for LLM calls
 BATCH_SIZE = int(os.getenv("RELATION_BATCH_SIZE", "8"))
 
+# [JR] Relation judging aggregates up to 3 evidence chunks per pair and can exceed
+# adapters.py's global 8192 default (see findings.md 2026-07-07/2026-07-08 entries);
+# 16384 has now survived two full-course runs (me400, me200) with no overflow crash.
+# Set as a default here (not in adapters.py) so llm.py's per-chunk-x-concept calls,
+# which never need the bigger ceiling, keep the higher vLLM KV-cache concurrency that
+# comes with the smaller context size. setdefault so an explicit env var still wins.
+os.environ.setdefault("VLLM_MAX_MODEL_LEN", "16384")
+
 # Cache client
 _LLM_CLIENT = get_llm_client()
 
@@ -511,11 +519,19 @@ async def judge_pairpacket_batch(
 
     prompts = [bd["prompt"] for bd in batch_data]
 
+    # [JR] No try/except here, deliberately (same as adapters.py). The old one
+    # caught engine-init failures and substituted responses=["{}"] * n, which
+    # parses as relation=null, indistinguishable from a real "no relation".
+    # Writes are incremental and reruns resume, so crashing costs no progress.
+    # findings.md: the ME200 incident, 1976/1976 records were fake nulls.
+    responses = await _call_llm_batch(prompts, model=model)
+    '''
     try:
         responses = await _call_llm_batch(prompts, model=model)
     except Exception as e:
         print(f"Batch LLM call failed: {e}")
         responses = ["{}"] * len(prompts)
+    '''
 
     results = []
     for i, (bd, response_text) in enumerate(zip(batch_data, responses)):
